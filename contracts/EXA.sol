@@ -11,6 +11,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.
 // errors
 error Error__AmountIsZero();
 error Error_InvalidAddress(address invalidAddress);
+error Error_SenderIsNotTeam();
 
 contract EXA is ERC20, Ownable, ReentrancyGuard {
     using SafeMath for uint256;
@@ -67,14 +68,14 @@ contract EXA is ERC20, Ownable, ReentrancyGuard {
         _updateBalance();
     }
 
-    function addEthBalance()
+    function addEthBalance(uint256 _ethAmount)
         external
         payable
         onlyOwner
-        checkAmount(msg.value)
+        checkAmount(_ethAmount)
         nonReentrant
     {
-        _totalEthAmount += msg.value;
+        _totalEthAmount += _ethAmount;
         _updateBalance();
     }
 
