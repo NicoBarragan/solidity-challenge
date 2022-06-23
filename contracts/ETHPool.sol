@@ -7,6 +7,7 @@ import {IEXA} from "./IEXA.sol";
 
 error ETHPool_InsufficientBalance();
 error ETHPool_NotLPAmount();
+error Error_SenderIsNotTeam();
 
 contract ETHPool is ReentrancyGuard {
     IEXA public exaToken;
@@ -35,8 +36,23 @@ contract ETHPool is ReentrancyGuard {
             revert ETHPool_NotLPAmount();
         }
 
-        _poolBalance -= msg.value;
-        exaToken.burn(msg.sender, msg.value);
+        uint256 ethPerUnit = exaToken.getEthPerUnit();
+        uint256 ethAmount = ethPerUnit * lpAmount;
+
+        _poolBalance -= ethAmount;
+
+        payable(msg.sender).transfer(ethAmount);
+
+        exaToken.burn(msg.sender, lpAmount, ethAmount);
+    }
+
+    receive() external payable nonReentrant {
+        if (address(msg.sender) != _team) {
+            revert Error_SenderIsNotTeam();
+        }
+
+        _poolBalance += msg.value;
+        exaToken.addEthBalance(msg.value);
     }
 
     /* view functions */
