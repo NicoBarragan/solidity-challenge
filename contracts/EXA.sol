@@ -57,14 +57,14 @@ contract EXA is ERC20, Ownable, ReentrancyGuard {
         _updateBalance();
     }
 
-    function burn(address _from, uint256 _ethAmount)
-        external
-        checkAmount(_ethAmount)
-        nonReentrant
-    {
+    function burn(
+        address _from,
+        uint256 exaAmount,
+        uint256 _ethAmount // is calculated on ETHPool so is cheaper insert it as parameter and not calculate again
+    ) external checkAmount(_ethAmount) nonReentrant {
         (, _totalEthAmount) = _totalEthAmount.trySub(_ethAmount);
+        _burn(_from, exaAmount);
         _updateBalance();
-        _burn(_from, _ethAmount);
     }
 
     function addEthBalance()
@@ -81,5 +81,9 @@ contract EXA is ERC20, Ownable, ReentrancyGuard {
     function _updateBalance() internal {
         _totalSupply = totalSupply();
         (, _ethPerUnit) = _totalSupply.tryDiv(_totalEthAmount);
+    }
+
+    function getEthPerUnit() external view returns (uint256) {
+        return _ethPerUnit;
     }
 }
