@@ -13,7 +13,7 @@ interface IEXA is IERC20 {
         uint256 _ethAmount
     ) external;
 
-    function addEthBalance() external payable;
+    function addEthBalance(uint256 ethAmount) external payable;
 
     function getEthPerUnit() external view returns (uint256);
 }
