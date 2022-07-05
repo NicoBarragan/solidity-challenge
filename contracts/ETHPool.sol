@@ -4,10 +4,11 @@ pragma solidity ^0.8.9;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {IEXA} from "./IEXA.sol";
+import "hardhat/console.sol";
 
-error ETHPool_InsufficientBalance();
 error ETHPool_NotLPAmount();
 error Error_SenderIsNotTeam();
+error Error__AmountIsZero();
 
 contract ETHPool is ReentrancyGuard {
     IEXA public exaToken;
@@ -19,26 +20,37 @@ contract ETHPool is ReentrancyGuard {
         exaToken = IEXA(exaTokenAddr);
     }
 
-    function supply() external payable nonReentrant {
-        if (address(msg.sender).balance < msg.value) {
-            revert ETHPool_InsufficientBalance();
+    modifier checkAmount(uint256 amount) {
+        if (amount == 0) {
+            revert Error__AmountIsZero();
         }
+        _;
+    }
 
+    function supply() external payable nonReentrant {
         _poolBalance += msg.value;
         exaToken.mint(msg.sender, msg.value);
     }
 
-    function withdraw(uint256 lpAmount) external payable nonReentrant {
+    function withdraw(uint256 lpAmount)
+        external
+        payable
+        checkAmount(lpAmount)
+        nonReentrant
+    {
         if (
-            exaToken.balanceOf(msg.sender) > 0 ||
-            exaToken.balanceOf(msg.sender) < lpAmount
+            0 > exaToken.balanceOf(msg.sender) ||
+            lpAmount > exaToken.balanceOf(msg.sender)
         ) {
             revert ETHPool_NotLPAmount();
         }
 
         uint256 ethPerUnit = exaToken.getEthPerUnit();
-        uint256 ethAmount = ethPerUnit * lpAmount;
+        console.log("ethPerUnit", ethPerUnit);
+        uint256 ethAmount = lpAmount / ethPerUnit;
+        console.log("ethAmount", ethAmount);
 
+        console.log("poolBalance before", _poolBalance);
         _poolBalance -= ethAmount;
 
         payable(msg.sender).transfer(ethAmount);
@@ -57,11 +69,11 @@ contract ETHPool is ReentrancyGuard {
 
     /* view functions */
 
-    function getTeam() external view returns (address) {
-        return _team;
-    }
-
     function getAmountDeposited() external view returns (uint256) {
         return _poolBalance;
+    }
+
+    function getTeam() external view returns (address) {
+        return _team;
     }
 }
