@@ -9,7 +9,6 @@ import {
   MockContract,
 } from "@ethereum-waffle/mock-contract";
 import { BigNumber, Signer } from "ethers";
-import { promises } from "dns";
 const logger = require("pino")();
 use(waffleChai);
 
@@ -23,6 +22,7 @@ describe("ETHPool", () => {
 
   let ethPool: ETHPool;
   let exaToken: EXA;
+  let initialSupply: BigNumber;
 
   beforeEach(async () => {
     // prepare (signers) ownerWallet and userWallet
@@ -31,28 +31,189 @@ describe("ETHPool", () => {
     userAddress = await user.getAddress();
     teamAddress = await team.getAddress();
 
-    // send 1 eth from signer(0) to random ownerWallet and userWallet
-    await owner.sendTransaction({
-      to: ownerAddress,
-      value: ethers.utils.parseEther("1.0"),
-    });
+    const exaFactory = await ethers.getContractFactory("EXA");
+    exaToken = (await exaFactory.deploy()) as EXA;
 
-    await owner.sendTransaction({
-      to: userAddress,
-      value: ethers.utils.parseEther("1.0"),
-    });
-
-    const exaFactory = await ethers.getContractFactory("EXA__Factory");
-    exaToken = (await exaFactory.deploy({ from: ownerAddress })) as EXA;
-
-    const ethPoolFactory = await ethers.getContractFactory("ETHPool__Factory");
-    ethPool = (await ethPoolFactory.deploy(teamAddress, exaToken.address, {
-      from: ownerAddress,
-    })) as ETHPool;
+    const ethPoolFactory = await ethers.getContractFactory("ETHPool");
+    ethPool = (await ethPoolFactory.deploy(
+      teamAddress,
+      exaToken.address
+    )) as ETHPool;
     await ethPool.deployed();
-
     await exaToken.transferOwnership(ethPool.address, { from: ownerAddress });
+    initialSupply = await exaToken.totalSupply();
+    logger.info(`initialSupply: ${initialSupply}`);
+  });
 
-    logger.info(`EXA token owner: ${exaToken.owner}`);
+  describe("constructor", () => {
+    it("should initialize the contract with the variables correctly", async () => {
+      const exaTokenContract = await ethPool.exaToken();
+      const team = await ethPool.getTeam();
+
+      expect(exaTokenContract).to.equal(exaToken.address);
+      expect(team).to.equal(teamAddress);
+      expect(await exaToken.owner()).to.eq(ethPool.address);
+    });
+  });
+
+  describe("supply", () => {
+    it.skip("should revert if the sender hasn't enough ETH amount", async () => {
+      const userBalance = await ethers.provider.getBalance(userAddress);
+      const amount = userBalance.add(1);
+      await expect(
+        ethPool.connect(user).supply({ from: userAddress, value: amount })
+      ).to.reverted;
+    });
+
+    it("should supply the ethPool with the correct amount of eth", async () => {
+      const amount = ethers.utils.parseEther("0.5");
+      const supply = await ethPool.connect(user).supply({
+        from: userAddress,
+        value: amount,
+      });
+      expect(supply).to.changeEtherBalance(ethPool.address, amount);
+      expect(supply).to.changeEtherBalance(userAddress, -amount);
+    });
+
+    it("should mint the EXA token to the sender", async () => {
+      const amount = ethers.utils.parseEther("0.5");
+      const senderBalanceBefore = await exaToken.balanceOf(userAddress);
+      await ethPool.connect(user).supply({
+        from: userAddress,
+        value: amount,
+      });
+
+      const senderBalanceAfter = await exaToken.balanceOf(userAddress);
+      assert(senderBalanceAfter > senderBalanceBefore);
+    });
+
+    it("should update the total ETH amount deposited after supply", async () => {
+      const amount = ethers.utils.parseEther("0.5");
+      await ethPool.connect(user).supply({
+        from: userAddress,
+        value: amount,
+      });
+
+      const totalBalance = await ethPool.getAmountDeposited();
+      expect(totalBalance).to.eq(amount);
+    });
+  });
+
+  describe("withdraw", () => {
+    it("should revert if the sender hasn't enough EXA amount", async () => {
+      const amount = ethers.utils.parseEther("0.5");
+      await ethPool.connect(user).supply({ from: userAddress, value: amount });
+
+      const exaUserBalance = await exaToken.balanceOf(userAddress);
+      const amountToWithdraw = exaUserBalance.add(1);
+      await expect(
+        ethPool.connect(user).withdraw(amountToWithdraw, { from: userAddress })
+      ).to.revertedWith("ETHPool_NotLPAmount()");
+    });
+
+    it("should revert if the sender EXA amount is equal 0", async () => {
+      const amount = ethers.utils.parseEther("0.5");
+      const exaUserBalance = await exaToken.balanceOf(userAddress);
+
+      expect(exaUserBalance).to.equal(BigNumber.from(0));
+      await expect(
+        ethPool.connect(user).withdraw(amount, { from: userAddress })
+      ).to.revertedWith("ETHPool_NotLPAmount()");
+    });
+
+    it("should withdraw the correct amount of EXA", async () => {
+      const amount = ethers.utils.parseEther("0.5");
+      await ethPool.connect(user).supply({ from: userAddress, value: amount });
+
+      const amountToWithdraw = await exaToken.balanceOf(userAddress);
+
+      logger.info(`amountToWithdraw: ${amountToWithdraw}`);
+
+      const withdraw = await ethPool.connect(user).withdraw(amountToWithdraw, {
+        from: userAddress,
+      });
+
+      logger.info("here");
+
+      expect(withdraw).to.changeEtherBalance(userAddress, amountToWithdraw);
+      expect(withdraw).to.changeEtherBalance(
+        ethPool.address,
+        -amountToWithdraw
+      );
+    });
+
+    it("should update the total ETH balance after withdraw", async () => {
+      logger.info(`First ETH balance: ${await ethPool.getAmountDeposited()}`);
+      const amount = ethers.utils.parseEther("0.5");
+      await ethPool.connect(user).supply({ from: userAddress, value: amount });
+
+      const amountToWithdraw = await exaToken.balanceOf(userAddress);
+      await ethPool.connect(user).withdraw(amountToWithdraw, {
+        from: userAddress,
+      });
+
+      const totalBalance = await ethPool.getAmountDeposited();
+      expect(totalBalance).to.eq(BigNumber.from(0));
+    });
+
+    // TODO: in the EXA test, test burn after multiple withdraws
+    it("should burn correctly the EXA withdrawn amount", async () => {
+      const amount = ethers.utils.parseEther("0.5");
+      await ethPool.connect(user).supply({ from: userAddress, value: amount });
+
+      const exaSupplyBefore = await exaToken.totalSupply();
+      const amountToWithdraw = await exaToken.balanceOf(userAddress);
+
+      await ethPool.connect(user).withdraw(amountToWithdraw, {
+        from: userAddress,
+      });
+
+      const exaSupplyAfter = await exaToken.totalSupply();
+      expect(exaSupplyAfter).to.be.lt(exaSupplyBefore);
+      expect(exaSupplyAfter).to.be.eq(initialSupply);
+    });
+  });
+
+  describe("receive", () => {
+    it("should revert if the sender is not the team", async () => {
+      const amount = ethers.utils.parseEther("0.5");
+      await expect(
+        user.sendTransaction({ to: ethPool.address, value: amount })
+      ).to.revertedWith("Error_SenderIsNotTeam()");
+    });
+
+    it("should receive the ETH and update the pool balance correctly", async () => {
+      const amount = ethers.utils.parseEther("0.5");
+      await team.sendTransaction({ to: ethPool.address, value: amount });
+
+      const poolEthBalance = await ethPool.getAmountDeposited();
+      expect(poolEthBalance).to.eq(amount);
+    });
+
+    it("should receive the ETH and update the ETH balance in EXA token correctly only after the ETH sent from the team", async () => {
+      const amount = ethers.utils.parseEther("0.5");
+      await team.sendTransaction({ to: ethPool.address, value: amount });
+
+      const exaSupply = await exaToken.totalSupply();
+      const exaEthPerUnit = await exaToken.getEthPerUnit();
+
+      logger.info(exaSupply.toString());
+      logger.info(amount.toString());
+      expect(exaEthPerUnit).to.eq(exaSupply.div(amount));
+    });
+
+    it("should receive the ETH and update the ETH balance in EXA token correctly after a supply from user and ETH sent from the team", async () => {
+      const amount = ethers.utils.parseEther("0.5");
+      await ethPool.connect(user).supply({ from: userAddress, value: amount });
+
+      await team.sendTransaction({ to: ethPool.address, value: amount });
+
+      const exaSupply = await exaToken.totalSupply();
+      const exaEthPerUnit = await exaToken.getEthPerUnit();
+
+      logger.info(exaSupply.toString());
+      logger.info(amount.toString());
+      expect(exaEthPerUnit).to.eq(exaSupply.div(amount.mul(2)));
+    });
   });
 });
