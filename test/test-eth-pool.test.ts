@@ -1,4 +1,4 @@
-import { ETHPool, EXA } from "../typechain";
+import { ETHPool, EXA, MockV3Aggregator, MockDAI } from "../typechain";
 import { expect, use } from "chai";
 import "@nomiclabs/hardhat-ethers";
 import { ethers } from "hardhat";
@@ -17,7 +17,12 @@ describe("ETHPool", () => {
 
   let ethPool: ETHPool;
   let exaToken: EXA;
+  let daiToken: MockDAI;
+  let mockV3Aggregator: MockV3Aggregator;
+  let ethDaiPrice: BigNumber;
   let initialSupply: BigNumber;
+  let userDaiBalance: BigNumber;
+  let ownerDaiBalance: BigNumber;
 
   beforeEach(async () => {
     // prepare (signers) ownerWallet and userWallet
@@ -29,25 +34,57 @@ describe("ETHPool", () => {
     const exaFactory = await ethers.getContractFactory("EXA");
     exaToken = (await exaFactory.deploy()) as EXA;
 
+    // getethDaiPrice and set decimals, for MOCKVAgg contract, and for testing purpose
+    ethDaiPrice = ethers.utils.parseEther("0.001");
+    logger.info(`ethDaiPrice: ${ethDaiPrice}`);
+    const decimals = BigNumber.from("18");
+
+    // define token mock contract (DAI token for testing)
+    const mockDAITokenFactory = await ethers.getContractFactory("MockDAI");
+    daiToken = (await mockDAITokenFactory.deploy()) as MockDAI;
+
+    // get and deploy MockV3Aggregator contract (returns gas price)
+    const mockAggFactory = await ethers.getContractFactory("MockV3Aggregator");
+    mockV3Aggregator = (await mockAggFactory.deploy(
+      decimals,
+      ethDaiPrice
+    )) as MockV3Aggregator;
+
     const ethPoolFactory = await ethers.getContractFactory("ETHPool");
     ethPool = (await ethPoolFactory.deploy(
       teamAddress,
-      exaToken.address
+      exaToken.address,
+      daiToken.address,
+      mockV3Aggregator.address
     )) as ETHPool;
     await ethPool.deployed();
+
     await exaToken.transferOwnership(ethPool.address, { from: ownerAddress });
+
     initialSupply = await exaToken.totalSupply();
     logger.info(`initialSupply: ${initialSupply}`);
+
+    // mint DAI tokens
+    await daiToken.transfer(userAddress, BigNumber.from("3000"));
+    userDaiBalance = await daiToken.balanceOf(userAddress);
+    ownerDaiBalance = await daiToken.balanceOf(ownerAddress);
   });
 
   describe("constructor", () => {
     it("should initialize the contract with the variables correctly", async () => {
-      const exaTokenContract = await ethPool.exaToken();
+      const exaTokenContract = await ethPool.getExaToken();
+      const exaOwner = await exaToken.owner();
       const team = await ethPool.getTeam();
+      const ethDaiPriceContract = await ethPool.getEthDaiPrice();
+      const stablecoin = await ethPool.stablecoin();
+      const priceFeedAgg = await ethPool.priceFeedV3Aggregator();
 
       expect(exaTokenContract).to.equal(exaToken.address);
       expect(team).to.equal(teamAddress);
-      expect(await exaToken.owner()).to.eq(ethPool.address);
+      expect(exaOwner).to.eq(ethPool.address);
+      expect(ethDaiPriceContract.toString()).to.equal(ethDaiPrice.toString());
+      expect(stablecoin).to.equal(daiToken.address);
+      expect(priceFeedAgg).to.equal(mockV3Aggregator.address);
     });
   });
 
@@ -95,7 +132,7 @@ describe("ETHPool", () => {
       const amountToWithdraw = exaUserBalance.add(1);
       await expect(
         ethPool.connect(user).withdraw(amountToWithdraw, { from: userAddress })
-      ).to.revertedWith("Error_NotLPAmount()");
+      ).to.revertedWith("Error__NotLPAmount()");
     });
 
     it("should revert if the sender EXA amount is equal 0", async () => {
@@ -105,7 +142,7 @@ describe("ETHPool", () => {
       expect(exaUserBalance).to.equal(BigNumber.from(0));
       await expect(
         ethPool.connect(user).withdraw(amount, { from: userAddress })
-      ).to.revertedWith("Error_NotLPAmount()");
+      ).to.revertedWith("Error__NotLPAmount()");
     });
 
     it("should withdraw the correct amount of EXA", async () => {
@@ -246,7 +283,7 @@ describe("ETHPool", () => {
       const amount = ethers.utils.parseEther("0.5");
       await expect(
         user.sendTransaction({ to: ethPool.address, value: amount })
-      ).to.revertedWith("Error_SenderIsNotTeam()");
+      ).to.revertedWith("Error__SenderIsNotTeam()");
     });
 
     it("should receive the ETH and update the pool balance correctly", async () => {
@@ -315,9 +352,23 @@ describe("ETHPool", () => {
     });
   });
 
+  /* View functions tests */
   describe("getTeam", () => {
     it("should return the team address correctly", async () => {
       expect(await ethPool.getTeam()).to.eq(teamAddress);
+    });
+  });
+
+  describe("getEthDaiPrice", () => {
+    it("should return the ETH/DAI price correctly", async () => {
+      const ethDaiPriceContract = await ethPool.getEthDaiPrice();
+      expect(ethDaiPriceContract).to.eq(BigNumber.from(ethDaiPrice));
+    });
+  });
+
+  describe("getExaToken", () => {
+    it("should return the EXA token address correctly", async () => {
+      expect(await ethPool.getExaToken()).to.eq(exaToken.address);
     });
   });
 });
