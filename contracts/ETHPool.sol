@@ -74,8 +74,9 @@ contract ETHPool is ReentrancyGuard {
         }
 
         (, int256 ethDaiPrice, , , ) = priceFeedV3Aggregator.latestRoundData();
-        (bool success, uint256 ethAmount) = (stableAmount * 10**18).tryDiv(
-            uint256(ethDaiPrice)
+        (bool success, uint256 ethAmount) = (stableAmount * 10**30).tryDiv(
+            uint256(ethDaiPrice) // for keeping with 18 decimals
+            // TODO: check why this is the correct way to do it
         );
         if (!success || ethAmount == 0) {
             revert Error__DivFailed(stableAmount, uint256(ethDaiPrice));
