@@ -2,18 +2,18 @@
 
 pragma solidity ^0.8.9;
 
-import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {IEXA} from "./IEXA.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
 import "hardhat/console.sol";
 
-error ETHPool_NotLPAmount();
+error Error_NotLPAmount();
 error Error_SenderIsNotTeam();
 error Error__AmountIsZero();
 
 contract ETHPool is ReentrancyGuard {
     IEXA public exaToken;
-    address private immutable _team;
-    uint256 private _poolBalance;
+    address private _team;
 
     constructor(address team, address exaTokenAddr) {
         _team = team;
@@ -27,8 +27,18 @@ contract ETHPool is ReentrancyGuard {
         _;
     }
 
+    modifier onlyTeam() {
+        if (msg.sender != _team) {
+            revert Error_SenderIsNotTeam();
+        }
+        _;
+    }
+
     function supply() external payable nonReentrant {
-        _poolBalance += msg.value;
+        exaToken.mint(msg.sender, msg.value);
+    }
+
+    function supplyWithDAI() external payable nonReentrant {
         exaToken.mint(msg.sender, msg.value);
     }
 
@@ -42,7 +52,7 @@ contract ETHPool is ReentrancyGuard {
             0 > exaToken.balanceOf(msg.sender) ||
             lpAmount > exaToken.balanceOf(msg.sender)
         ) {
-            revert ETHPool_NotLPAmount();
+            revert Error_NotLPAmount();
         }
 
         uint256 ethPerUnit = exaToken.getEthPerUnit();
@@ -50,28 +60,23 @@ contract ETHPool is ReentrancyGuard {
         uint256 ethAmount = lpAmount / ethPerUnit;
         console.log("ethAmount", ethAmount);
 
-        console.log("poolBalance before", _poolBalance);
-        _poolBalance -= ethAmount;
-
+        console.log("poolBalance before", address(this).balance);
         payable(msg.sender).transfer(ethAmount);
 
         exaToken.burn(msg.sender, lpAmount, ethAmount);
     }
 
-    receive() external payable nonReentrant {
-        if (address(msg.sender) != _team) {
-            revert Error_SenderIsNotTeam();
-        }
-
-        _poolBalance += msg.value;
+    // method for the team to send ETH to the pool, and the pool to update ETH balance in EXA token
+    receive() external payable onlyTeam nonReentrant {
         exaToken.addEthBalance(msg.value);
     }
 
-    /* view functions */
-
-    function getAmountDeposited() external view returns (uint256) {
-        return _poolBalance;
+    // function for updating the _team if is necessary
+    function updateTeam(address newTeam) external onlyTeam {
+        _team = newTeam;
     }
+
+    /* view functions */
 
     function getTeam() external view returns (address) {
         return _team;
