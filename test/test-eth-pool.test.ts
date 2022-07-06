@@ -123,6 +123,102 @@ describe("ETHPool", () => {
     });
   });
 
+  describe("supplyWithStable", () => {
+    it("should revert if amount sent is zero", async () => {
+      const daiAmount = BigNumber.from("0");
+
+      await daiToken
+        .connect(user)
+        .approve(ethPool.address, daiAmount, { from: userAddress });
+      await expect(
+        ethPool.connect(user).supplyWithStable(daiAmount, {
+          from: userAddress,
+        })
+      ).to.be.revertedWith("Error__AmountIsZero()");
+    });
+
+    it("should revert if sender has not enough amount", async () => {
+      let daiAmount = await daiToken.balanceOf(userAddress);
+      daiAmount = daiAmount.add(BigNumber.from("1"));
+
+      await daiToken
+        .connect(user)
+        .approve(ethPool.address, daiAmount, { from: userAddress });
+
+      await expect(
+        ethPool.connect(user).supplyWithStable(daiAmount, {
+          from: userAddress,
+        })
+      ).to.be.revertedWith("Error__NotEnoughAmount()");
+    });
+
+    it("should revert if sender eth/stable gas feed fails and returns 0", async () => {
+      const daiAmount = await daiToken.balanceOf(userAddress);
+      const zero = BigNumber.from("0");
+      await mockV3Aggregator.updateAnswer(zero);
+
+      await daiToken
+        .connect(user)
+        .approve(ethPool.address, daiAmount, { from: userAddress });
+
+      await expect(
+        ethPool.connect(user).supplyWithStable(daiAmount, {
+          from: userAddress,
+        })
+      ).to.be.revertedWith(`Error__DivFailed(${daiAmount}, ${zero})`);
+    });
+
+    it("should supply correctly using DAI", async () => {
+      const daiAmount = BigNumber.from("1000");
+      const ethAmount = daiAmount.mul(ethDaiPrice);
+
+      await daiToken
+        .connect(user)
+        .approve(ethPool.address, daiAmount, { from: userAddress });
+      const tx = await ethPool.connect(user).supplyWithStable(daiAmount, {
+        from: userAddress,
+      });
+
+      expect(tx).to.changeTokenBalance(
+        daiToken.address,
+        userAddress,
+        -daiAmount
+      );
+      expect(tx).to.changeTokenBalance(ethPool.address, userAddress, ethAmount);
+    });
+
+    it("should mint correctly to the user that used DAI to supply", async () => {
+      const daiAmount = BigNumber.from("1000");
+      const userBalanceBefore = await exaToken.balanceOf(userAddress);
+
+      await daiToken
+        .connect(user)
+        .approve(ethPool.address, daiAmount, { from: userAddress });
+      await ethPool.connect(user).supplyWithStable(daiAmount, {
+        from: userAddress,
+      });
+
+      const userBalanceAfter = await exaToken.balanceOf(userAddress);
+      expect(userBalanceAfter).to.be.gt(userBalanceBefore);
+    });
+
+    it.only("should emit the event correctly", async () => {
+      const daiAmount = BigNumber.from("1000");
+      const ethAmount = daiAmount.mul(ethDaiPrice);
+
+      await daiToken
+        .connect(user)
+        .approve(ethPool.address, daiAmount, { from: userAddress });
+      const tx = await ethPool.connect(user).supplyWithStable(daiAmount, {
+        from: userAddress,
+      });
+
+      await expect(tx)
+        .to.emit(ethPool, "Supply")
+        .withArgs(userAddress, ethAmount);
+    });
+  });
+
   describe("withdraw", () => {
     it("should revert if the sender hasn't enough EXA amount", async () => {
       const amount = ethers.utils.parseEther("0.5");
