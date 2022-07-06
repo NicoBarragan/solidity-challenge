@@ -4,20 +4,41 @@ pragma solidity ^0.8.9;
 
 import {IEXA} from "./IEXA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 import "hardhat/console.sol";
 
-error Error_NotLPAmount();
-error Error_SenderIsNotTeam();
+error Error__NotLPAmount();
+error Error__NotEnoughAmount();
+error Error__SenderIsNotTeam();
 error Error__AmountIsZero();
+error Error__DivFailed(uint256 dividend, uint256 divisor);
+error Error__InvalidToken();
 
 contract ETHPool is ReentrancyGuard {
-    IEXA public exaToken;
-    address private _team;
+    using SafeMath for uint256;
 
-    constructor(address team, address exaTokenAddr) {
+    event Supply(address indexed sender, uint256 amount);
+    event Withdraw(address indexed sender, uint256 amount);
+    event TeamAddedETH(address indexed team, uint256 amount);
+
+    IEXA private _exaToken;
+    address private _team;
+    IERC20 public immutable stablecoin;
+    AggregatorV3Interface public immutable priceFeedV3Aggregator;
+
+    constructor(
+        address team,
+        address exaAddress,
+        address stablecoinAddress, // TODO: request a list with addresses of tokens
+        address ethStablePriceFeed
+    ) {
         _team = team;
-        exaToken = IEXA(exaTokenAddr);
+        _exaToken = IEXA(exaAddress);
+        priceFeedV3Aggregator = AggregatorV3Interface(ethStablePriceFeed);
+        stablecoin = IERC20(stablecoinAddress);
     }
 
     modifier checkAmount(uint256 amount) {
@@ -29,17 +50,41 @@ contract ETHPool is ReentrancyGuard {
 
     modifier onlyTeam() {
         if (msg.sender != _team) {
-            revert Error_SenderIsNotTeam();
+            revert Error__SenderIsNotTeam();
         }
         _;
     }
 
     function supply() external payable nonReentrant {
-        exaToken.mint(msg.sender, msg.value);
+        _exaToken.mint(msg.sender, msg.value);
+
+        emit Supply(msg.sender, msg.value);
     }
 
-    function supplyWithDAI() external payable nonReentrant {
-        exaToken.mint(msg.sender, msg.value);
+    function supplyWithStable(uint256 stableAmount)
+        external
+        checkAmount(stableAmount)
+        nonReentrant
+    {
+        if (
+            stablecoin.balanceOf(msg.sender) == 0 ||
+            stablecoin.balanceOf(msg.sender) < stableAmount
+        ) {
+            revert Error__NotEnoughAmount();
+        }
+
+        (, int256 ethDaiPrice, , , ) = priceFeedV3Aggregator.latestRoundData();
+        (bool success, uint256 ethAmount) = (stableAmount * 10**18).tryDiv(
+            uint256(ethDaiPrice)
+        );
+        if (!success || ethAmount == 0) {
+            revert Error__DivFailed(stableAmount, uint256(ethDaiPrice));
+        }
+
+        stablecoin.transferFrom(msg.sender, address(this), stableAmount);
+        _exaToken.mint(msg.sender, ethAmount);
+
+        emit Supply(msg.sender, ethAmount);
     }
 
     function withdraw(uint256 lpAmount)
@@ -49,26 +94,34 @@ contract ETHPool is ReentrancyGuard {
         nonReentrant
     {
         if (
-            0 > exaToken.balanceOf(msg.sender) ||
-            lpAmount > exaToken.balanceOf(msg.sender)
+            0 > _exaToken.balanceOf(msg.sender) ||
+            lpAmount > _exaToken.balanceOf(msg.sender)
         ) {
-            revert Error_NotLPAmount();
+            revert Error__NotLPAmount();
         }
 
-        uint256 ethPerUnit = exaToken.getEthPerUnit();
+        uint256 ethPerUnit = _exaToken.getEthPerUnit();
         console.log("ethPerUnit", ethPerUnit);
-        uint256 ethAmount = lpAmount / ethPerUnit;
+
+        (bool success, uint256 ethAmount) = lpAmount.tryDiv(ethPerUnit);
+        if (!success || ethAmount == 0) {
+            revert Error__DivFailed(lpAmount, ethPerUnit);
+        }
         console.log("ethAmount", ethAmount);
 
         console.log("poolBalance before", address(this).balance);
         payable(msg.sender).transfer(ethAmount);
 
-        exaToken.burn(msg.sender, lpAmount, ethAmount);
+        _exaToken.burn(msg.sender, lpAmount, ethAmount);
+
+        emit Withdraw(msg.sender, ethAmount);
     }
 
     // method for the team to send ETH to the pool, and the pool to update ETH balance in EXA token
     receive() external payable onlyTeam nonReentrant {
-        exaToken.addEthBalance(msg.value);
+        _exaToken.addEthBalance(msg.value);
+
+        emit TeamAddedETH(msg.sender, msg.value);
     }
 
     // function for updating the _team if is necessary
@@ -80,5 +133,14 @@ contract ETHPool is ReentrancyGuard {
 
     function getTeam() external view returns (address) {
         return _team;
+    }
+
+    function getEthDaiPrice() external view returns (uint256) {
+        (, int256 ethDaiPrice, , , ) = priceFeedV3Aggregator.latestRoundData();
+        return uint256(ethDaiPrice);
+    }
+
+    function getExaToken() external view returns (address) {
+        return address(_exaToken);
     }
 }
