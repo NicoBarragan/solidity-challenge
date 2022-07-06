@@ -11,7 +11,7 @@ import "hardhat/console.sol";
 
 // errors
 error Error__AmountIsZero();
-error Error_InvalidAddress(address invalidAddress);
+error Error_AddressZero();
 error Error_SenderIsNotTeam();
 
 contract EXA is IEXA, ERC20, Ownable, ReentrancyGuard {
@@ -45,14 +45,13 @@ contract EXA is IEXA, ERC20, Ownable, ReentrancyGuard {
         nonReentrant
     {
         if (_to == address(0)) {
-            revert Error_InvalidAddress(_to);
+            revert Error_AddressZero();
         }
 
         if (_ethPerUnit == 0) {
             _ethPerUnit += (_initialSupply / _ethAmount);
         }
 
-        // need _mint here for updating totalSupply before calculating ethPerUnit
         _exaAmount = _ethAmount * _ethPerUnit;
         _mint(_to, _exaAmount);
 
