@@ -52,14 +52,6 @@ describe("ETHPool", () => {
   });
 
   describe("supply", () => {
-    it.skip("should revert if the sender hasn't enough ETH amount", async () => {
-      const userBalance = await ethers.provider.getBalance(userAddress);
-      const amount = userBalance.add(1);
-      await expect(
-        ethPool.connect(user).supply({ from: userAddress, value: amount })
-      ).to.reverted;
-    });
-
     it("should supply the ethPool with the correct amount of eth", async () => {
       const amount = ethers.utils.parseEther("0.5");
       const supply = await ethPool.connect(user).supply({
@@ -89,7 +81,7 @@ describe("ETHPool", () => {
         value: amount,
       });
 
-      const totalBalance = await ethPool.getAmountDeposited();
+      const totalBalance = await ethers.provider.getBalance(ethPool.address);
       expect(totalBalance).to.eq(amount);
     });
   });
@@ -103,7 +95,7 @@ describe("ETHPool", () => {
       const amountToWithdraw = exaUserBalance.add(1);
       await expect(
         ethPool.connect(user).withdraw(amountToWithdraw, { from: userAddress })
-      ).to.revertedWith("ETHPool_NotLPAmount()");
+      ).to.revertedWith("Error_NotLPAmount()");
     });
 
     it("should revert if the sender EXA amount is equal 0", async () => {
@@ -113,7 +105,7 @@ describe("ETHPool", () => {
       expect(exaUserBalance).to.equal(BigNumber.from(0));
       await expect(
         ethPool.connect(user).withdraw(amount, { from: userAddress })
-      ).to.revertedWith("ETHPool_NotLPAmount()");
+      ).to.revertedWith("Error_NotLPAmount()");
     });
 
     it("should withdraw the correct amount of EXA", async () => {
@@ -187,7 +179,11 @@ describe("ETHPool", () => {
     });
 
     it("should update the total ETH balance after withdraw", async () => {
-      logger.info(`First ETH balance: ${await ethPool.getAmountDeposited()}`);
+      logger.info(
+        `First ETH balance: ${await ethers.provider.getBalance(
+          ethPool.address
+        )}`
+      );
       const amount = ethers.utils.parseEther("0.5");
       await ethPool.connect(user).supply({ from: userAddress, value: amount });
 
@@ -196,7 +192,7 @@ describe("ETHPool", () => {
         from: userAddress,
       });
 
-      const totalBalance = await ethPool.getAmountDeposited();
+      const totalBalance = await ethers.provider.getBalance(ethPool.address);
       expect(totalBalance).to.eq(BigNumber.from(0));
     });
 
@@ -257,7 +253,7 @@ describe("ETHPool", () => {
       const amount = ethers.utils.parseEther("0.5");
       await team.sendTransaction({ to: ethPool.address, value: amount });
 
-      const poolEthBalance = await ethPool.getAmountDeposited();
+      const poolEthBalance = await ethers.provider.getBalance(ethPool.address);
       expect(poolEthBalance).to.eq(amount);
     });
 
@@ -303,6 +299,25 @@ describe("ETHPool", () => {
       logger.info(exaSupply.toString());
       logger.info(amount.toString());
       expect(exaEthPerUnit).to.eq(exaSupply.div(amount.mul(3)));
+    });
+  });
+
+  describe("updateTeam", () => {
+    it("should update the team address correctly", async () => {
+      const newteam = ethers.Wallet.createRandom();
+      const newteamAddress = newteam.address;
+
+      await ethPool.connect(team).updateTeam(newteamAddress, {
+        from: teamAddress,
+      });
+
+      expect(await ethPool.getTeam()).to.eq(newteamAddress);
+    });
+  });
+
+  describe("getTeam", () => {
+    it("should return the team address correctly", async () => {
+      expect(await ethPool.getTeam()).to.eq(teamAddress);
     });
   });
 });
