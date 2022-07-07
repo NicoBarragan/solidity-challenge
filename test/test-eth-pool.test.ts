@@ -416,15 +416,14 @@ describe("ETHPool", () => {
     });
 
     it("should receive the ETH and update the ETH balance in EXA token correctly only after the ETH sent from the team", async () => {
-      const amount = ethers.utils.parseEther("0.5");
-      await team.sendTransaction({ to: ethPool.address, value: amount });
+      const ethAmount = ethers.utils.parseEther("0.5");
+      await team.sendTransaction({ to: ethPool.address, value: ethAmount });
 
-      const exaSupply = await exaToken.totalSupply();
+      const initialMintSupply = ethers.utils.parseEther("1");
+      const ethPerUnit = initialMintSupply.div(ethAmount);
       const exaEthPerUnit = await exaToken.getEthPerUnit();
 
-      logger.info(exaSupply.toString());
-      logger.info(amount.toString());
-      expect(exaEthPerUnit).to.eq(exaSupply.div(amount));
+      expect(exaEthPerUnit).to.eq(ethPerUnit);
     });
 
     it("should receive the ETH and update the ETH balance in EXA token correctly after a supply from user and ETH sent from the team", async () => {
