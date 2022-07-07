@@ -8,10 +8,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-import "hardhat/console.sol";
-
-error Error__NotLPAmount();
-error Error__NotEnoughAmount();
+error Error__NotEnoughAmount(uint256 amountRequested, uint256 balance);
 error Error__SenderIsNotTeam();
 error Error__AmountIsZero();
 error Error__DivFailed(uint256 dividend, uint256 divisor);
@@ -70,7 +67,10 @@ contract ETHPool is ReentrancyGuard {
             stablecoin.balanceOf(msg.sender) == 0 ||
             stablecoin.balanceOf(msg.sender) < stableAmount
         ) {
-            revert Error__NotEnoughAmount();
+            revert Error__NotEnoughAmount(
+                stableAmount,
+                stablecoin.balanceOf(msg.sender)
+            );
         }
 
         (, int256 ethDaiPrice, , , ) = priceFeedV3Aggregator.latestRoundData();
@@ -98,21 +98,20 @@ contract ETHPool is ReentrancyGuard {
             0 > _exaToken.balanceOf(msg.sender) ||
             lpAmount > _exaToken.balanceOf(msg.sender)
         ) {
-            revert Error__NotLPAmount();
+            revert Error__NotEnoughAmount(
+                lpAmount,
+                _exaToken.balanceOf(msg.sender)
+            );
         }
 
         uint256 ethPerUnit = _exaToken.getEthPerUnit();
-        console.log("ethPerUnit", ethPerUnit);
 
         (bool success, uint256 ethAmount) = lpAmount.tryDiv(ethPerUnit);
         if (!success || ethAmount == 0) {
             revert Error__DivFailed(lpAmount, ethPerUnit);
         }
-        console.log("ethAmount", ethAmount);
 
-        console.log("poolBalance before", address(this).balance);
         payable(msg.sender).transfer(ethAmount);
-
         _exaToken.burn(msg.sender, lpAmount, ethAmount);
 
         emit Withdraw(msg.sender, ethAmount);
