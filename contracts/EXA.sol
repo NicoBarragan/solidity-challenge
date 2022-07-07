@@ -11,25 +11,26 @@ import "hardhat/console.sol";
 
 // errors
 error Error__AmountIsZero();
-error Error_AddressZero();
-error Error_SenderIsNotTeam();
+error Error__AddressZero();
+error Error__DivFailed(uint256 dividend, uint256 divisor);
 
 contract EXA is IEXA, ERC20, Ownable, ReentrancyGuard {
     using SafeMath for uint256;
 
     // token variables and constants
-    uint256 private _totalEthAmount;
-    uint256 private _ethPerUnit;
     string public constant NAME = "Exactly Token";
     string public constant SYMBOL = "EXA";
-    uint256 private constant _initialSupply = 1 * 10**18; // SUPPLY EXA = SUPPLY ETH
+
+    uint256 private constant _initialMintSupply = 1 * 10**18; // SUPPLY EXA = SUPPLY ETH
+    uint256 private _totalEthAmount;
+    uint256 private _ethPerUnit;
 
     // user variables
     uint256 private _exaAmount;
 
     constructor() ERC20(NAME, SYMBOL) {
         _totalEthAmount = 0;
-        _ethPerUnit = 0; // TODO: 1? for avoid an error when updating and dividing
+        _ethPerUnit = 0;
     }
 
     modifier checkAmount(uint256 amount) {
@@ -45,20 +46,22 @@ contract EXA is IEXA, ERC20, Ownable, ReentrancyGuard {
         nonReentrant
     {
         if (_to == address(0)) {
-            revert Error_AddressZero();
+            revert Error__AddressZero();
         }
 
+        _totalEthAmount += _ethAmount;
+
         if (_ethPerUnit == 0) {
-            _ethPerUnit += (_initialSupply / _ethAmount);
+            _ethPerUnit += (_initialMintSupply / _totalEthAmount);
         }
 
         _exaAmount = _ethAmount * _ethPerUnit;
         _mint(_to, _exaAmount);
 
-        _totalEthAmount += _ethAmount;
         _updateBalance();
     }
 
+    // is already asserted that user has enough EXA to burn in ETHPool
     function burn(
         address _from,
         uint256 exaAmount,
@@ -75,19 +78,43 @@ contract EXA is IEXA, ERC20, Ownable, ReentrancyGuard {
         checkAmount(_ethAmount)
     {
         _totalEthAmount += _ethAmount;
+
+        if (_ethPerUnit == 0) {
+            console.log("here");
+            _ethPerUnit += (_initialMintSupply / _totalEthAmount);
+            return;
+        }
+
         _updateBalance();
     }
 
     function _updateBalance() internal {
-        uint256 _totalSupply2 = super.totalSupply();
-        console.log("_totalSupply2", _totalSupply2);
+        uint256 _totalSupply = super.totalSupply();
+        console.log("_totalSupply", _totalSupply);
         console.log("total eth amount from exa token", _totalEthAmount);
-        (, _ethPerUnit) = _totalSupply2.tryDiv(_totalEthAmount);
+
+        if (_totalSupply == 0 && _totalEthAmount == 0) {
+            _ethPerUnit = 0;
+            return;
+        }
+
+        // divResult if avoid shadowing _totalEthAmount
+        (bool success, uint256 divResult) = _totalSupply.tryDiv(
+            _totalEthAmount
+        );
+        if (!success) {
+            revert Error__DivFailed(_totalSupply, _totalEthAmount);
+        }
+        _ethPerUnit = divResult;
         console.log("ethPerUnit (0)", _ethPerUnit);
     }
 
     function getEthPerUnit() external view returns (uint256) {
         console.log("ethPerUnit", _ethPerUnit);
         return _ethPerUnit;
+    }
+
+    function getTotalEthAmount() external view returns (uint256) {
+        return _totalEthAmount;
     }
 }
