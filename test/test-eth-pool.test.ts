@@ -211,9 +211,14 @@ describe("ETHPool", () => {
       expect(userBalanceAfter).to.be.gt(userBalanceBefore);
     });
 
-    it("should emit the event correctly", async () => {
-      const daiAmount = BigNumber.from("1000");
-      const ethAmount = daiAmount.mul(ethDaiPrice);
+    it("should emit the event correctly with other value for ethDaiPriceFeed", async () => {
+      const daiAmount = BigNumber.from("2000");
+      const newEthDaiPrice = BigNumber.from("2300");
+
+      await mockV3Aggregator.updateAnswer(newEthDaiPrice);
+      const ethAmount = daiAmount
+        .mul(ethers.utils.parseEther("1"))
+        .div(newEthDaiPrice);
 
       await daiToken
         .connect(user)
@@ -419,7 +424,7 @@ describe("ETHPool", () => {
       const ethAmount = ethers.utils.parseEther("0.5");
       await team.sendTransaction({ to: ethPool.address, value: ethAmount });
 
-      const initialMintSupply = ethers.utils.parseEther("1");
+      const initialMintSupply = await exaToken.getInitialMintSupply();
       const ethPerUnit = initialMintSupply.div(ethAmount);
       const exaEthPerUnit = await exaToken.getEthPerUnit();
 
