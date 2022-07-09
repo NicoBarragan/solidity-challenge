@@ -52,7 +52,7 @@ contract EXA is IEXA, ERC20, Ownable, ReentrancyGuard {
         _totalEthAmount += _ethAmount;
 
         if (_ethPerUnit == 0) {
-            _ethPerUnit += (_initialMintSupply / _totalEthAmount);
+            _ethPerUnit = (_initialMintSupply / _totalEthAmount);
         }
 
         _exaAmount = _ethAmount * _ethPerUnit;
@@ -116,5 +116,9 @@ contract EXA is IEXA, ERC20, Ownable, ReentrancyGuard {
 
     function getTotalEthAmount() external view returns (uint256) {
         return _totalEthAmount;
+    }
+
+    function getInitialMintSupply() external pure returns (uint256) {
+        return _initialMintSupply;
     }
 }
