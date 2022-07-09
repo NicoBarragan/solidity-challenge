@@ -71,7 +71,7 @@ describe("ETHPool", () => {
 
     it("should mint to the address and update the totalEthAmount and ethPerUnit correctly when is the first mint", async () => {
       const ethAmount = ethers.utils.parseEther("0.5");
-      const initialMintSupply = ethers.utils.parseEther("1");
+      const initialMintSupply = await exaToken.getInitialMintSupply();
       const ethPerUnit = initialMintSupply.div(ethAmount);
       const exaAmount = ethAmount.mul(ethPerUnit);
 
@@ -88,7 +88,7 @@ describe("ETHPool", () => {
 
     it("should mint to the address and update the totalEthAmount and ethPerUnit correctly when is not the first mint", async () => {
       let ethAmount = ethers.utils.parseEther("0.5");
-      const initialMintSupply = ethers.utils.parseEther("1");
+      const initialMintSupply = await exaToken.getInitialMintSupply();
       let ethPerUnit = initialMintSupply.div(ethAmount);
       let exaAmount = ethAmount.mul(ethPerUnit);
 
@@ -128,7 +128,7 @@ describe("ETHPool", () => {
 
     it("should burn and update totalEthAmount and ethPerUnit correctly", async () => {
       const ethAmount = ethers.utils.parseEther("0.5");
-      const initialMintSupply = ethers.utils.parseEther("1");
+      const initialMintSupply = await exaToken.getInitialMintSupply();
       const ethPerUnit = initialMintSupply.div(ethAmount);
       const exaAmount = ethAmount.mul(ethPerUnit);
       const zero = BigNumber.from("0");
@@ -159,7 +159,7 @@ describe("ETHPool", () => {
 
     it("should update totalEthAmount and ethPerUnit correctly", async () => {
       const ethAmount = ethers.utils.parseEther("0.4");
-      const initialMintSupply = ethers.utils.parseEther("1");
+      const initialMintSupply = await exaToken.getInitialMintSupply();
       const ethPerUnit = initialMintSupply.div(ethAmount);
 
       await exaToken.addEthBalance(ethAmount);
@@ -172,5 +172,7 @@ describe("ETHPool", () => {
     });
   });
 
+  /* TODO: test properly after a mint and an add, a mint a burn
+   and add, a mint and add a burn and with multiple of them */
   describe("_updateBalance", () => {});
 });
