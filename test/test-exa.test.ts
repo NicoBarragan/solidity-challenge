@@ -1,4 +1,4 @@
-import { EXA, IEXA, ETHPool } from "../typechain";
+import { EXA } from "../typechain";
 import { expect, use } from "chai";
 import "@nomiclabs/hardhat-ethers";
 import { ethers } from "hardhat";
