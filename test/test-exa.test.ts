@@ -172,7 +172,106 @@ describe("ETHPool", () => {
     });
   });
 
-  /* TODO: test properly after a mint and an add, a mint a burn
-   and add, a mint and add a burn and with multiple of them */
-  describe("_updateBalance", () => {});
+  describe("_updateBalance", () => {
+    it("should update ethPerUnit correctly after a mint, an addEthBalance and a burn on every phase", async () => {
+      let ethAmount = ethers.utils.parseEther("0.3");
+      const initialMintSupply = await exaToken.getInitialMintSupply();
+
+      await exaToken.mint(userAddress, ethAmount);
+      let ethPerUnit = initialMintSupply.div(ethAmount);
+      let ethPerUnitContract = await exaToken.getEthPerUnit();
+      expect(ethPerUnitContract).to.be.equal(ethPerUnit);
+
+      await exaToken.addEthBalance(ethAmount);
+      ethAmount = ethAmount.add(ethAmount);
+      let totalSupply = await exaToken.totalSupply();
+      ethPerUnit = totalSupply.div(ethAmount);
+      ethPerUnitContract = await exaToken.getEthPerUnit();
+      expect(ethPerUnitContract).to.be.equal(ethPerUnit);
+
+      const ownerExaBalance = await exaToken.balanceOf(userAddress);
+      const ethToWithdraw = ownerExaBalance.div(ethPerUnit);
+      expect(ethToWithdraw).to.be.gt(ethAmount.div(2)); // this checks that user receive the rewards
+      await exaToken.burn(userAddress, ethToWithdraw, ownerExaBalance);
+
+      ethAmount = ethAmount.sub(ethToWithdraw);
+      totalSupply = await exaToken.totalSupply();
+      ethPerUnit = totalSupply.div(ethAmount);
+      ethPerUnitContract = await exaToken.getEthPerUnit();
+      expect(ethPerUnitContract).to.be.equal(ethPerUnit);
+    });
+
+    it("should update ethPerunit after multiple mints, addEthBalance and burns of different addresses", async () => {
+      const ethAmountOne = ethers.utils.parseEther("0.1");
+      const ethAmountTwo = ethers.utils.parseEther("0.3");
+      const ethAmountThree = ethers.utils.parseEther("0.7");
+      const ethAmountFour = ethers.utils.parseEther("0.5");
+      const zero = BigNumber.from("0");
+      let totalEthAmount;
+      let totalSupply;
+      let ethPerUnit;
+      let userExaBalance;
+      let ethToWithdraw;
+
+      await exaToken.mint(ownerAddress, ethAmountOne);
+      await exaToken
+        .connect(user)
+        .mint(userAddress, ethAmountTwo, { from: userAddress });
+
+      totalEthAmount = ethAmountOne.add(ethAmountTwo);
+      totalSupply = await exaToken.totalSupply();
+      ethPerUnit = totalSupply.div(totalEthAmount);
+
+      userExaBalance = await exaToken.balanceOf(userAddress);
+      ethToWithdraw = userExaBalance.div(ethPerUnit);
+      await exaToken
+        .connect(user)
+        .burn(userAddress, userExaBalance, ethToWithdraw, {
+          from: userAddress,
+        });
+
+      totalEthAmount = totalEthAmount.sub(ethToWithdraw);
+      totalSupply = await exaToken.totalSupply();
+      ethPerUnit = totalSupply.div(totalEthAmount);
+
+      await exaToken.addEthBalance(ethAmountThree);
+
+      totalEthAmount = totalEthAmount.add(ethAmountThree);
+      ethPerUnit = totalSupply.div(totalEthAmount);
+
+      await exaToken
+        .connect(user)
+        .mint(userAddress, ethAmountFour, { from: userAddress });
+
+      totalEthAmount = totalEthAmount.add(ethAmountFour);
+      totalSupply = await exaToken.totalSupply();
+      ethPerUnit = totalSupply.div(totalEthAmount);
+
+      const ownerExaBalance = await exaToken.balanceOf(ownerAddress);
+      ethToWithdraw = ownerExaBalance.div(ethPerUnit);
+      await exaToken.burn(ownerAddress, ownerExaBalance, ethToWithdraw);
+
+      totalEthAmount = totalEthAmount.sub(ethToWithdraw);
+      totalSupply = await exaToken.totalSupply();
+      ethPerUnit = totalSupply.div(totalEthAmount);
+
+      userExaBalance = await exaToken.balanceOf(userAddress);
+      ethToWithdraw = userExaBalance.div(ethPerUnit);
+      await exaToken
+        .connect(user)
+        .burn(userAddress, userExaBalance, ethToWithdraw, {
+          from: userAddress,
+        });
+
+      totalEthAmount = totalEthAmount.sub(ethToWithdraw);
+      totalSupply = await exaToken.totalSupply();
+      ethPerUnit = totalSupply.div(totalEthAmount);
+
+      const ethPerUnitContract = await exaToken.getEthPerUnit();
+      const totalEthAmountContract = await exaToken.getTotalEthAmount();
+
+      expect(ethPerUnitContract).to.be.equal(ethPerUnit);
+      expect(totalEthAmountContract).to.be.equal(zero);
+    });
+  });
 });
