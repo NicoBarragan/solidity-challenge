@@ -7,12 +7,16 @@ import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {IEXA} from "./IEXA.sol";
-import "hardhat/console.sol";
 
 // errors
 error Error__AmountIsZero();
 error Error__AddressZero();
 error Error__DivFailed(uint256 dividend, uint256 divisor);
+error Error__NotEnoughAmount(
+    uint256 amountRequested,
+    uint256 senderBalance,
+    uint256 totalSupply
+);
 
 contract EXA is IEXA, ERC20, Ownable, ReentrancyGuard {
     using SafeMath for uint256;
@@ -21,7 +25,7 @@ contract EXA is IEXA, ERC20, Ownable, ReentrancyGuard {
     string public constant NAME = "Exactly Token";
     string public constant SYMBOL = "EXA";
 
-    uint256 private constant _initialMintSupply = 1 * 10**18; // SUPPLY EXA = SUPPLY ETH
+    uint256 private constant _initialMintSupply = 1 * 10**18;
     uint256 private _totalEthAmount;
     uint256 private _ethPerUnit;
 
@@ -40,6 +44,7 @@ contract EXA is IEXA, ERC20, Ownable, ReentrancyGuard {
         _;
     }
 
+    // method for mint EXA tokens and execute update ethPerUnit and totalEthAmount
     function mint(address _to, uint256 _ethAmount)
         external
         checkAmount(_ethAmount)
@@ -51,6 +56,8 @@ contract EXA is IEXA, ERC20, Ownable, ReentrancyGuard {
 
         _totalEthAmount += _ethAmount;
 
+        /* This is for avoid a division error when mint() is the
+         * first interaction with the contract and _ethPerUnit is equal zero */
         if (_ethPerUnit == 0) {
             _ethPerUnit = (_initialMintSupply / _totalEthAmount);
         }
@@ -61,17 +68,33 @@ contract EXA is IEXA, ERC20, Ownable, ReentrancyGuard {
         _updateBalance();
     }
 
-    // is already asserted that user has enough EXA to burn in ETHPool
+    // method for burn EXA tokens and update ethPerUnit and totalEthAmount
     function burn(
         address _from,
         uint256 exaAmount,
         uint256 _ethAmount // is calculated on ETHPool so is cheaper insert it as parameter and not calculate again
     ) external checkAmount(_ethAmount) {
+        if (_from == address(0)) {
+            revert Error__AddressZero();
+        }
+
+        if (
+            super.totalSupply() < exaAmount ||
+            super.balanceOf(_from) < exaAmount
+        ) {
+            revert Error__NotEnoughAmount(
+                exaAmount,
+                super.balanceOf(_from),
+                super.totalSupply()
+            );
+        }
         (, _totalEthAmount) = _totalEthAmount.trySub(_ethAmount);
         _burn(_from, exaAmount);
+
         _updateBalance();
     }
 
+    // method for the team to add ETH and update ethPerUnit and totalEthAmount
     function addEthBalance(uint256 _ethAmount)
         external
         onlyOwner
@@ -79,8 +102,9 @@ contract EXA is IEXA, ERC20, Ownable, ReentrancyGuard {
     {
         _totalEthAmount += _ethAmount;
 
+        /* This is for avoid a division error when addEthBalance() is the
+         * first interaction with the contract and _ethPerUnit is equal zero */
         if (_ethPerUnit == 0) {
-            console.log("here");
             _ethPerUnit += (_initialMintSupply / _totalEthAmount);
             return;
         }
@@ -88,29 +112,26 @@ contract EXA is IEXA, ERC20, Ownable, ReentrancyGuard {
         _updateBalance();
     }
 
+    // method for update ethPerUnit
     function _updateBalance() internal {
         uint256 _totalSupply = super.totalSupply();
-        console.log("_totalSupply", _totalSupply);
-        console.log("total eth amount from exa token", _totalEthAmount);
 
+        // this is for avoid a division error
         if (_totalSupply == 0 && _totalEthAmount == 0) {
             _ethPerUnit = 0;
             return;
         }
 
-        // divResult if avoid shadowing _totalEthAmount
-        (bool success, uint256 divResult) = _totalSupply.tryDiv(
-            _totalEthAmount
-        );
+        bool success;
+        (success, _ethPerUnit) = _totalSupply.tryDiv(_totalEthAmount);
         if (!success) {
             revert Error__DivFailed(_totalSupply, _totalEthAmount);
         }
-        _ethPerUnit = divResult;
-        console.log("ethPerUnit (0)", _ethPerUnit);
     }
 
+    /* View functions */
+
     function getEthPerUnit() external view returns (uint256) {
-        console.log("ethPerUnit", _ethPerUnit);
         return _ethPerUnit;
     }
 
