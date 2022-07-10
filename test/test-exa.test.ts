@@ -111,8 +111,6 @@ describe("ETHPool", () => {
       logger.info(2);
       expect(ethPerUnit).to.be.equal(ethPerUnitContract);
     });
-
-    // TODO: test if mints correctly with multiple mints and a burn
   });
 
   describe("burn", () => {
@@ -124,6 +122,44 @@ describe("ETHPool", () => {
       await expect(
         exaToken.burn(userAddress, exaAmount, ethAmount)
       ).to.be.revertedWith("Error__AmountIsZero()");
+    });
+
+    it("should revert if there is no EXA minted", async () => {
+      const zero = BigNumber.from("0");
+      const ownerExaBalance = await exaToken.balanceOf(ownerAddress); // equal 0
+      const ethAmount = ethers.utils.parseEther("0.1");
+      const exaAmount = ethAmount;
+      const exaSupply = await exaToken.totalSupply();
+
+      expect(ownerExaBalance).to.be.equal(zero);
+      expect(exaSupply).to.be.equal(zero);
+      await expect(
+        exaToken.burn(ownerAddress, exaAmount, ethAmount)
+      ).to.be.revertedWith(
+        `Error__NotEnoughAmount(${exaAmount}, ${ownerExaBalance}, ${exaSupply})`
+      );
+    });
+
+    it("should revert if sender has not enough EXA amount", async () => {
+      const zero = BigNumber.from("0");
+      const ethAmount = ethers.utils.parseEther("0.6");
+      const exaAmount = ethAmount;
+
+      await exaToken
+        .connect(owner)
+        .mint(ownerAddress, ethAmount, { from: ownerAddress });
+
+      const userExaBalance = await exaToken.balanceOf(userAddress);
+      const exaSupply = await exaToken.totalSupply();
+
+      expect(userExaBalance).to.be.equal(zero);
+      await expect(
+        exaToken
+          .connect(user)
+          .burn(userAddress, exaAmount, ethAmount, { from: userAddress })
+      ).to.be.revertedWith(
+        `Error__NotEnoughAmount(${exaAmount}, ${userExaBalance}, ${exaSupply})`
+      );
     });
 
     it("should burn and update totalEthAmount and ethPerUnit correctly", async () => {
@@ -294,7 +330,7 @@ describe("ETHPool", () => {
     });
   });
 
-  describe.only("getInitialMintSupply", () => {
+  describe("getInitialMintSupply", () => {
     it("should return correctly the initialMintSupply", async () => {
       const initialMintSupply = BigNumber.from(`${10 ** 18}`);
       const initialMintSupplContract = await exaToken.getInitialMintSupply();
