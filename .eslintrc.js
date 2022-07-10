@@ -20,5 +20,35 @@ module.exports = {
       "error",
       { ignores: ["modules"] },
     ],
+    "node/no-unpublished-import": [
+      "error",
+      {
+        allowModules: [
+          "chai",
+          "hardhat",
+          "@nomiclabs/hardhat-ethers",
+          "ethers",
+          "../typechain",
+        ],
+      },
+    ],
+    "node/no-unpublished-require": [
+      "error",
+      {
+        allowModules: ["pino"],
+      },
+    ],
+    "node/no-extraneous-import": [
+      "error",
+      {
+        allowModules: ["@ethereum-waffle/chai"],
+      },
+    ],
+    "node/no-missing-import": [
+      "error",
+      {
+        allowModules: ["../typechain"],
+      },
+    ],
   },
 };
