@@ -274,4 +274,32 @@ describe("ETHPool", () => {
       expect(totalEthAmountContract).to.be.equal(zero);
     });
   });
+
+  /* View functions tests */
+  describe("getEthPerUnit", () => {
+    it("should return the ethPerUnit correctly", async () => {
+      const zero = BigNumber.from("0");
+      const ethPerUnitContract = await exaToken.getEthPerUnit();
+
+      expect(ethPerUnitContract).to.be.equal(zero);
+    });
+  });
+
+  describe("getTotalEthAmount", () => {
+    it("should return the totalEthAmount correctly", async () => {
+      const zero = BigNumber.from("0");
+      const ethPerUnitContract = await exaToken.getTotalEthAmount();
+
+      expect(ethPerUnitContract).to.be.equal(zero);
+    });
+  });
+
+  describe.only("getInitialMintSupply", () => {
+    it("should return correctly the initialMintSupply", async () => {
+      const initialMintSupply = BigNumber.from(`${10 ** 18}`);
+      const initialMintSupplContract = await exaToken.getInitialMintSupply();
+
+      expect(initialMintSupplContract).to.be.equal(initialMintSupply);
+    });
+  });
 });
