@@ -12,15 +12,16 @@ error Error__NotEnoughAmount(uint256 amountRequested, uint256 balance);
 error Error__SenderIsNotTeam();
 error Error__AmountIsZero();
 error Error__DivFailed(uint256 dividend, uint256 divisor);
-error Error__InvalidToken();
 
 contract ETHPool is ReentrancyGuard {
     using SafeMath for uint256;
 
+    // events to emit
     event Supply(address indexed sender, uint256 amount);
     event Withdraw(address indexed sender, uint256 amount);
     event TeamAddedETH(address indexed team, uint256 amount);
 
+    // variables and constants
     IEXA private _exaToken;
     address private _team;
     IERC20 public immutable stablecoin;
@@ -29,7 +30,7 @@ contract ETHPool is ReentrancyGuard {
     constructor(
         address team,
         address exaAddress,
-        address stablecoinAddress, // TODO: request a list with addresses of tokens
+        address stablecoinAddress,
         address ethStablePriceFeed
     ) {
         _team = team;
@@ -38,6 +39,7 @@ contract ETHPool is ReentrancyGuard {
         stablecoin = IERC20(stablecoinAddress);
     }
 
+    // modifier for avoid amount in param to be zero
     modifier checkAmount(uint256 amount) {
         if (amount == 0) {
             revert Error__AmountIsZero();
@@ -45,6 +47,7 @@ contract ETHPool is ReentrancyGuard {
         _;
     }
 
+    // modifier that asserts that sender is the team address
     modifier onlyTeam() {
         if (msg.sender != _team) {
             revert Error__SenderIsNotTeam();
@@ -52,12 +55,14 @@ contract ETHPool is ReentrancyGuard {
         _;
     }
 
+    // method for supply ETH to the pool and mint EXA tokens to the sender
     function supply() external payable nonReentrant {
         _exaToken.mint(msg.sender, msg.value);
 
         emit Supply(msg.sender, msg.value);
     }
 
+    // method for supply DAI to the pool, convert to ETH amount and mint EXA tokens to the sender
     function supplyWithStable(uint256 stableAmount)
         external
         checkAmount(stableAmount)
@@ -76,7 +81,6 @@ contract ETHPool is ReentrancyGuard {
         (, int256 ethDaiPrice, , , ) = priceFeedV3Aggregator.latestRoundData();
         (bool success, uint256 ethAmount) = (stableAmount * 10**18).tryDiv(
             uint256(ethDaiPrice) // for keeping with 18 decimals
-            // TODO: check why this is the correct way to do it
         );
         if (!success || ethAmount == 0) {
             revert Error__DivFailed(stableAmount, uint256(ethDaiPrice));
@@ -88,6 +92,7 @@ contract ETHPool is ReentrancyGuard {
         emit Supply(msg.sender, ethAmount);
     }
 
+    // method for withdraw ETH from the pool and burn EXA tokens from the sender
     function withdraw(uint256 lpAmount)
         external
         payable
