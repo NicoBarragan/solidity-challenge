@@ -34,7 +34,6 @@ describe("ETHPool", () => {
 
     // getethDaiPrice and set decimals, for MOCKVAgg contract, and for testing purpose
     ethDaiPrice = ethers.utils.parseEther("0.001");
-    logger.info(`ethDaiPrice: ${ethDaiPrice}`);
     const decimals = BigNumber.from("18");
 
     // define token mock contract (DAI token for testing)
@@ -60,7 +59,6 @@ describe("ETHPool", () => {
     await exaToken.transferOwnership(ethPool.address, { from: ownerAddress });
 
     initialSupply = await exaToken.totalSupply();
-    logger.info(`initialSupply: ${initialSupply}`);
 
     // mint DAI tokens
     await daiToken.transfer(userAddress, BigNumber.from("3000"));

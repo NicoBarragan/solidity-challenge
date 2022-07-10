@@ -25,10 +25,7 @@ describe("ETHPool", () => {
     const exaFactory = await ethers.getContractFactory("EXA");
     exaToken = (await exaFactory.deploy()) as EXA;
 
-    // await exaToken.transferOwnership(ethPool.address, { from: ownerAddress });
-
     initialSupply = await exaToken.totalSupply();
-    logger.info(`initialSupply: ${initialSupply}`);
   });
 
   describe("constructor", () => {
