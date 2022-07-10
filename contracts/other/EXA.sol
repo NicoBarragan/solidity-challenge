@@ -135,11 +135,11 @@ contract EXA is IEXA, ERC20, Ownable, ReentrancyGuard {
         return _ethPerUnit;
     }
 
-    function getTotalEthAmount() external view returns (uint256) {
-        return _totalEthAmount;
-    }
-
     function getInitialMintSupply() external pure returns (uint256) {
         return _initialMintSupply;
+    }
+
+    function getTotalEthAmount() external view returns (uint256) {
+        return _totalEthAmount;
     }
 }
