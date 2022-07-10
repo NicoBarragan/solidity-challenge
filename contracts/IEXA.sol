@@ -16,4 +16,8 @@ interface IEXA is IERC20 {
     function addEthBalance(uint256 ethAmount) external;
 
     function getEthPerUnit() external view returns (uint256);
+
+    function getTotalEthAmount() external view returns (uint256);
+
+    function getInitialMintSupply() external pure returns (uint256);
 }
