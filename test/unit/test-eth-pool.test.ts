@@ -1,4 +1,4 @@
-import { ETHPool, EXA, MockV3Aggregator, MockDAI } from "../typechain";
+import { ETHPool, EXA, MockV3Aggregator, MockDAI } from "../../typechain";
 import { expect, use } from "chai";
 import "@nomiclabs/hardhat-ethers";
 import { ethers } from "hardhat";
