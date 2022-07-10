@@ -7,8 +7,16 @@ import "@typechain/hardhat";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
 
-dotenv.config();
+const found = process.argv.indexOf("--network");
+const networkName = process.argv[found + 1];
+if (!networkName) {
+  throw new Error("invalid network name");
+}
 
+console.log("network", networkName);
+dotenv.config({
+  path: `.env.${networkName}`,
+});
 // This is a sample Hardhat task. To learn how to create your own go to
 // https://hardhat.org/guides/create-task.html
 task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
