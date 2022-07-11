@@ -4,9 +4,7 @@ const logger = require("pino")();
 
 const { STABLECOIN_ADDRESS, ETH_STABLE_PRICE_FEED } = process.env;
 
-export default async function deployEthPool(
-  exaAddress: string
-): Promise<ETHPool | undefined> {
+export default async function deployEthPool(): Promise<ETHPool | undefined> {
   try {
     const [_, team] = await ethers.getSigners();
     logger.info(`Deploying the contract...`);
@@ -14,9 +12,10 @@ export default async function deployEthPool(
     const ethPoolFactory = await ethers.getContractFactory("ETHPool");
     const ethPool = await ethPoolFactory.deploy(
       team.address,
-      exaAddress,
       `${STABLECOIN_ADDRESS}`,
-      `${ETH_STABLE_PRICE_FEED}`
+      `${ETH_STABLE_PRICE_FEED}`,
+      "Exactly LP Token",
+      "EXA"
     );
 
     logger.info(`ETHPool contract deployed to: ${ethPool.address}`);
