@@ -42,10 +42,27 @@ const config: HardhatUserConfig = {
     ],
   },
   networks: {
-    ropsten: {
-      url: process.env.ROPSTEN_URL || "",
-      accounts:
-        process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+    rposten: {
+      url: process.env.URL || "",
+      accounts: [
+        process.env.USER_A_PRIVATE_KEY ||
+          "0xabc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc1",
+        process.env.TEAM_PRIVATE_KEY ||
+          "0xabc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc1",
+        process.env.USER_B_PRIVATE_KEY ||
+          "0xabc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc1",
+      ],
+    },
+    rinkeby: {
+      url: process.env.URL || "",
+      accounts: [
+        process.env.USER_A_PRIVATE_KEY ||
+          "0xabc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc1",
+        process.env.TEAM_PRIVATE_KEY ||
+          "0xabc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc1",
+        process.env.USER_B_PRIVATE_KEY ||
+          "0xabc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc1",
+      ],
     },
   },
   gasReporter: {
