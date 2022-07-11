@@ -1,12 +1,13 @@
-import { ETHPool, MockV3Aggregator, MockDAI } from "../../typechain";
+import { ETHPool } from "../../typechain";
 import { expect, use } from "chai";
 import "@nomiclabs/hardhat-ethers";
 import { ethers } from "hardhat";
 import { waffleChai } from "@ethereum-waffle/chai";
-import { BigNumber, logger, Signer } from "ethers";
+import { BigNumber, Signer } from "ethers";
+const logger = require("pino")();
 use(waffleChai);
 
-describe("ETHPool", () => {
+describe("unit-ETHPool", () => {
   let owner: Signer;
   let user: Signer;
   let team: Signer;
@@ -15,9 +16,6 @@ describe("ETHPool", () => {
   let teamAddress: string;
 
   let ethPool: ETHPool;
-  let daiToken: MockDAI;
-  let mockV3Aggregator: MockV3Aggregator;
-  let ethDaiPrice: BigNumber;
   let initialSupply: BigNumber;
 
   beforeEach(async () => {
@@ -27,48 +25,22 @@ describe("ETHPool", () => {
     userAddress = await user.getAddress();
     teamAddress = await team.getAddress();
 
-    // getethDaiPrice and set decimals, for MOCKVAgg contract, and for testing purpose
-    ethDaiPrice = ethers.utils.parseEther("0.001");
-    const decimals = BigNumber.from("18");
-
-    // define token mock contract (DAI token for testing)
-    const mockDAITokenFactory = await ethers.getContractFactory("MockDAI");
-    daiToken = (await mockDAITokenFactory.deploy()) as MockDAI;
-
-    // get and deploy MockV3Aggregator contract (returns gas price)
-    const mockAggFactory = await ethers.getContractFactory("MockV3Aggregator");
-    mockV3Aggregator = (await mockAggFactory.deploy(
-      decimals,
-      ethDaiPrice
-    )) as MockV3Aggregator;
-
     const ethPoolFactory = await ethers.getContractFactory("ETHPool");
     ethPool = (await ethPoolFactory.deploy(
       teamAddress,
-      daiToken.address,
-      mockV3Aggregator.address,
       "Exactly LP Token",
       "EXA"
     )) as ETHPool;
     await ethPool.deployed();
 
     initialSupply = await ethPool.totalSupply();
-
-    // mint DAI tokens
-    await daiToken.transfer(userAddress, BigNumber.from("3000"));
   });
 
   describe("constructor", () => {
     it("should initialize the contract with the variables correctly", async () => {
       const team = await ethPool.getTeam();
-      const ethDaiPriceContract = await ethPool.getEthStablePrice();
-      const stablecoin = await ethPool.stablecoin();
-      const priceFeedAgg = await ethPool.priceFeedV3Aggregator();
 
       expect(team).to.equal(teamAddress);
-      expect(ethDaiPriceContract.toString()).to.equal(ethDaiPrice.toString());
-      expect(stablecoin).to.equal(daiToken.address);
-      expect(priceFeedAgg).to.equal(mockV3Aggregator.address);
     });
   });
 
@@ -112,94 +84,6 @@ describe("ETHPool", () => {
       await expect(supply)
         .to.emit(ethPool, "Supply")
         .withArgs(userAddress, amount);
-    });
-  });
-
-  describe("supplyWithStable", () => {
-    it("should revert if amount sent is zero", async () => {
-      const daiAmount = BigNumber.from("0");
-
-      await daiToken
-        .connect(user)
-        .approve(ethPool.address, daiAmount, { from: userAddress });
-      await expect(
-        ethPool.connect(user).supplyWithStable(daiAmount, {
-          from: userAddress,
-        })
-      ).to.be.revertedWith("Error__AmountIsZero()");
-    });
-
-    it("should revert if sender has not enough amount", async () => {
-      const daiAmountUser = await daiToken.balanceOf(userAddress);
-      const daiAmountReq = daiAmountUser.add(BigNumber.from("1"));
-
-      await daiToken
-        .connect(user)
-        .approve(ethPool.address, daiAmountReq, { from: userAddress });
-
-      await expect(
-        ethPool.connect(user).supplyWithStable(daiAmountReq, {
-          from: userAddress,
-        })
-      ).to.be.revertedWith(
-        `Error__NotEnoughAmount(${daiAmountReq}, ${daiAmountUser})`
-      );
-    });
-
-    it("should revert if sender eth/stable gas feed fails and returns 0", async () => {
-      const daiAmount = await daiToken.balanceOf(userAddress);
-      const zero = BigNumber.from("0");
-      await mockV3Aggregator.updateAnswer(zero);
-
-      await daiToken
-        .connect(user)
-        .approve(ethPool.address, daiAmount, { from: userAddress });
-
-      await expect(
-        ethPool.connect(user).supplyWithStable(daiAmount, {
-          from: userAddress,
-        })
-      ).to.be.revertedWith(`Error__DivFailed(${daiAmount}, ${zero})`);
-    });
-
-    it("should supply correctly using DAI", async () => {
-      const daiAmount = BigNumber.from("1000");
-      const ethAmount = daiAmount.mul(ethDaiPrice);
-
-      await daiToken
-        .connect(user)
-        .approve(ethPool.address, daiAmount, { from: userAddress });
-      const tx = await ethPool.connect(user).supplyWithStable(daiAmount, {
-        from: userAddress,
-      });
-
-      expect(tx).to.changeTokenBalance(
-        daiToken.address,
-        userAddress,
-        -daiAmount
-      );
-      expect(tx).to.changeTokenBalance(ethPool.address, userAddress, ethAmount);
-    });
-
-    it("should emit the event correctly with other value for ethDaiPriceFeed", async () => {
-      const daiAmount = BigNumber.from("2000");
-      const newEthDaiPrice = BigNumber.from("2300");
-
-      await mockV3Aggregator.updateAnswer(newEthDaiPrice);
-      const ethAmount = daiAmount
-        .mul(ethers.utils.parseEther("1"))
-        .div(newEthDaiPrice);
-
-      await daiToken
-        .connect(user)
-        .approve(ethPool.address, daiAmount, { from: userAddress });
-      const tx = await ethPool.connect(user).supplyWithStable(daiAmount, {
-        from: userAddress,
-      });
-
-      await expect(tx)
-        .to.emit(ethPool, "Supply")
-        .withArgs(userAddress, ethAmount);
     });
   });
 
@@ -496,6 +380,58 @@ describe("ETHPool", () => {
       expect(ethPerUnitContract).to.be.equal(zero);
       expect(totalEthAmountContract).to.be.equal(zero);
     });
+
+    it("should update ethPerUnit correctly after multiple mints, addEthBalance and burns of different addresses", async () => {
+      const zero = BigNumber.from("0");
+
+      const userEthAmount = ethers.utils.parseEther("0.1");
+      await ethPool.connect(user).supply({
+        from: userAddress,
+        value: userEthAmount,
+      });
+
+      const teamBalance = await ethers.provider.getBalance(teamAddress);
+      const ethAmountTeam = teamBalance.div(10);
+      await team.sendTransaction({
+        to: ethPool.address,
+        value: ethAmountTeam,
+      });
+
+      const ownerEthAmount = ethers.utils.parseEther("0.4");
+      await ethPool.connect(owner).supply({
+        from: ownerAddress,
+        value: ownerEthAmount,
+      });
+
+      const userExaBalance = await ethPool.balanceOf(userAddress);
+      const userAWithdrawTx = await ethPool
+        .connect(user)
+        .withdraw(userExaBalance, {
+          from: userAddress,
+        });
+
+      const ownerExaBalance = await ethPool.balanceOf(ownerAddress);
+      const ownerWithdrawTx = await ethPool
+        .connect(owner)
+        .withdraw(ownerExaBalance, {
+          from: ownerAddress,
+        });
+
+      const ethPoolFinalBalance = await ethers.provider.getBalance(
+        ethPool.address
+      );
+
+      expect(ethPoolFinalBalance).to.be.equal(zero);
+      expect(userAWithdrawTx).to.changeEtherBalance(
+        userAddress,
+        userEthAmount.add(ethAmountTeam)
+      );
+      expect(ownerWithdrawTx).to.changeEtherBalance(
+        ownerAddress,
+        ownerEthAmount
+      );
+      logger.info(`ethPoolFinalBalance, ${ethPoolFinalBalance}`);
+    });
   });
 
   describe("_mintEToken", () => {
@@ -509,21 +445,6 @@ describe("ETHPool", () => {
 
       const senderBalanceAfter = await ethPool.balanceOf(userAddress);
       expect(senderBalanceAfter).to.be.gt(senderBalanceBefore);
-    });
-
-    it("should mint correctly to the user that used and stablecoin in supplyWithStable for supplying liquidity", async () => {
-      const daiAmount = BigNumber.from("1000");
-      const userBalanceBefore = await ethPool.balanceOf(userAddress);
-
-      await daiToken
-        .connect(user)
-        .approve(ethPool.address, daiAmount, { from: userAddress });
-      await ethPool.connect(user).supplyWithStable(daiAmount, {
-        from: userAddress,
-      });
-
-      const userBalanceAfter = await ethPool.balanceOf(userAddress);
-      expect(userBalanceAfter).to.be.gt(userBalanceBefore);
     });
   });
 
@@ -562,13 +483,6 @@ describe("ETHPool", () => {
   describe("getTeam", () => {
     it("should return the team address correctly", async () => {
       expect(await ethPool.getTeam()).to.eq(teamAddress);
-    });
-  });
-
-  describe("getEthStablePrice", () => {
-    it("should return the ETH/DAI price correctly", async () => {
-      const ethDaiPriceContract = await ethPool.getEthStablePrice();
-      expect(ethDaiPriceContract).to.eq(BigNumber.from(ethDaiPrice));
     });
   });
 
