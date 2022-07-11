@@ -1,8 +1,7 @@
 import deployEthPool from "../../scripts/eth-pool/deploy-eth-pool";
-import deployExa from "../../scripts/other/exa/deploy-exa";
 import getContractBalance from "../../scripts/utils/get-balance";
 import { ethers } from "hardhat";
-import { ETHPool, EXA } from "../../typechain";
+import { ETHPool } from "../../typechain";
 import { expect, use } from "chai";
 import "@nomiclabs/hardhat-ethers";
 import { waffleChai } from "@ethereum-waffle/chai";
@@ -10,7 +9,7 @@ import { BigNumber } from "ethers";
 const logger = require("pino")();
 use(waffleChai);
 
-const { STABLECOIN_ADDRESS } = process.env;
+const { DAI_ADDRESS } = process.env;
 
 describe("ETHPool", () => {
   it("should complete all the tx successfully", async () => {
@@ -21,10 +20,7 @@ describe("ETHPool", () => {
 
       const [wallet, team] = await ethers.getSigners();
 
-      const stablecoin = await ethers.getContractAt(
-        "ERC20",
-        `${STABLECOIN_ADDRESS}`
-      );
+      const stablecoin = await ethers.getContractAt("ERC20", `${DAI_ADDRESS}`);
 
       const ethPool = (await deployEthPool()) as ETHPool;
       logger.info(

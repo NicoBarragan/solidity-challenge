@@ -2,7 +2,7 @@ import { ethers } from "hardhat";
 import { ETHPool } from "../../typechain";
 const logger = require("pino")();
 
-const { STABLECOIN_ADDRESS, ETH_STABLE_PRICE_FEED } = process.env;
+const { DAI_ADDRESS, ETH_DAI_PRICE_FEED } = process.env;
 
 export default async function deployEthPool(): Promise<ETHPool | undefined> {
   try {
@@ -12,8 +12,8 @@ export default async function deployEthPool(): Promise<ETHPool | undefined> {
     const ethPoolFactory = await ethers.getContractFactory("ETHPool");
     const ethPool = await ethPoolFactory.deploy(
       team.address,
-      `${STABLECOIN_ADDRESS}`,
-      `${ETH_STABLE_PRICE_FEED}`,
+      `${DAI_ADDRESS}`,
+      `${ETH_DAI_PRICE_FEED}`,
       "Exactly LP Token",
       "EXA"
     );

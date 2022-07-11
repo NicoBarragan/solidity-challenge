@@ -1,28 +1,19 @@
 import deployEthPool from "./eth-pool/deploy-eth-pool";
 import getContractBalance from "./utils/get-balance";
 import { ethers } from "hardhat";
-import { ETHPool, EXA } from "../typechain";
-import { expect, use } from "chai";
-import "@nomiclabs/hardhat-ethers";
-import { waffleChai } from "@ethereum-waffle/chai";
-import { BigNumber } from "ethers";
+import { ETHPool } from "../typechain";
 const logger = require("pino")();
-use(waffleChai);
 
-const { STABLECOIN_ADDRESS } = process.env;
+const { DAI_ADDRESS } = process.env;
 
 (async () => {
   try {
     let tx;
     let ethPoolBalance;
-    const zero = BigNumber.from("0");
 
     const [wallet, team] = await ethers.getSigners();
 
-    const stablecoin = await ethers.getContractAt(
-      "ERC20",
-      `${STABLECOIN_ADDRESS}`
-    );
+    const stablecoin = await ethers.getContractAt("ERC20", `${DAI_ADDRESS}`);
 
     const ethPool = (await deployEthPool()) as ETHPool;
     logger.info(`ETHPool contract successfully deployed at ${ethPool.address}`);
@@ -69,8 +60,6 @@ const { STABLECOIN_ADDRESS } = process.env;
       `TX's successfully finished! 
           Here you can see the ETHPool contract tx's: https://etherscan.io/address/${ethPool.address}`
     );
-
-    expect(ethPoolBalance).to.be.equal(zero);
   } catch (err) {
     logger.error(err);
   }
