@@ -1,58 +1,46 @@
 # Smart Contract Challenge
 
-## A) Challenge
+## Solution
 
-### 1) Setup a project and create a contract
+I came up with the solution with ``ETHPool``: a pool contract that inherits from ``ERC20`` standard that calculates balances, and mints and burns lp tokens based on the ETH amount received. Also it calculates balance when the team sends ETH to the pool (only the team can).
 
-#### Summary
+You can find an exported function for getting the contract balance in ``get-balance.ts``, and you can run the script ``get-eth-pool-balance`` for getting the ETH balance of the pool from the console.
 
-ETHPool provides a service where people can deposit ETH and they will receive weekly rewards. Users must be able to take out their deposits along with their portion of rewards at any time. New rewards are deposited manually into the pool by the ETHPool team each week using a contract function.
+It has a script for making multiple interactions with the contract in ``index.ts``
 
-#### Requirements
+The contract is successfully tested with 35 unit tests, and an integration test.
 
-- Only the team can deposit rewards.
-- Deposited rewards go to the pool of users, not to individual users.
-- Users should be able to withdraw their deposits along with their share of rewards considering the time when they deposited.
+Bonus: I added a function for being able to supply to the contract with an stablecoin, calculating ETH amount using Chainlink Data Feeds Oracles. In my case I used DAI.
 
-Example:
+------------------------------------
+## Stack
 
-> Let say we have user **A** and **B** and team **T**.
->
-> **A** deposits 100, and **B** deposits 300 for a total of 400 in the pool. Now **A** has 25% of the pool and **B** has 75%. When **T** deposits 200 rewards, **A** should be able to withdraw 150 and **B** 450.
->
-> What if the following happens? **A** deposits then **T** deposits then **B** deposits then **A** withdraws and finally **B** withdraws.
-> **A** should get their deposit + all the rewards.
-> **B** should only get their deposit because rewards were sent to the pool before they participated.
+I solved the challenge using Solidity for developing the smart contracts, Hardhat as a framework, and Typescript for developing the scripts and testing (using Waffle too).
 
-#### Goal
+-------------------------------------
 
-Design and code a contract for ETHPool, take all the assumptions you need to move forward.
+## How to use
 
-You can use any development tools you prefer: Hardhat, Truffle, Brownie, Solidity, Vyper.
+Firstly, you have to setup a ``.env`` file for every network that you are going to use.
+For example, ``.env.rinkeby`` and ``.env.ropsten`` would have the same variables, but with different values each. You can find the variables in ``.env.example`` file.
 
-Useful resources:
+This, in my opinion, is better because you have different ``.env`` files for different networks. So you minimize the risk of revealing a sinlge ``.env`` with all the data (that would be a SPF). Also, it makes easier coding because is not necessary to hardcode the network name in the variables read from the ``.env`` file, since all of this files have the same variables, but with different data.
 
-- Solidity Docs: https://docs.soliditylang.org/en/v0.8.4
-- Educational Resource: https://github.com/austintgriffith/scaffold-eth
-- Project Starter: https://github.com/abarmat/solidity-starter
+### Tests
 
-### 2) Write tests
+``yarn hardhat test`` for running all the unit tests. The result is the following:
 
-Make sure that all your code is tested properly
+<img width="139" alt="image" src="https://user-images.githubusercontent.com/71539596/178199489-bba3c996-1672-47c7-8941-55c0dcf83078.png">
 
-### 3) Deploy your contract
 
-Deploy the contract to any Ethereum testnet of your preference. Keep record of the deployed address.
+``yarn hardhat test --network <network-name>`` for running the integration test. The result is the following:
 
-Bonus:
+### Scripts
 
-- Verify the contract in Etherscan
+``yarn hardhat run scripts/jobs/get-eth-pool-balance.ts`` for running the script that gets the ``ETHPool`` contract balance.
 
-### 4) Interact with the contract
+``yarn hardhat run scripts/utils/verify-eth-pool.ts`` for verifying the ``ETHPool`` contract from the console.
 
-Create a script (or a Hardhat task) to query the total amount of ETH held in the contract.
+------------------------------------
 
-_You can use any library you prefer: Ethers.js, Web3.js, Web3.py, eth-brownie_
 
-### 5) Contact
-If you want to apply to this position, please share your solution to our Solidity Challenge to the following email: jobs@exactly.finance
