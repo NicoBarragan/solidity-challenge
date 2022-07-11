@@ -7,7 +7,7 @@ import { BigNumber, Signer } from "ethers";
 const logger = require("pino")();
 use(waffleChai);
 
-describe("ETHPool", () => {
+describe.skip("EXA", () => {
   let owner: Signer;
   let user: Signer;
   let ownerAddress: string;

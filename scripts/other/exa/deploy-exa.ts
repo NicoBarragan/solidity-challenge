@@ -1,5 +1,5 @@
 import { ethers } from "hardhat";
-import { EXA } from "../../typechain";
+import { EXA } from "../../../typechain";
 const logger = require("pino")();
 
 export default async function deployExa(
