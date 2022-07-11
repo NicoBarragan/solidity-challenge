@@ -1,10 +1,9 @@
-import { ETHPool, EXA, MockV3Aggregator, MockDAI } from "../../typechain";
+import { ETHPool, MockV3Aggregator, MockDAI } from "../../typechain";
 import { expect, use } from "chai";
 import "@nomiclabs/hardhat-ethers";
 import { ethers } from "hardhat";
 import { waffleChai } from "@ethereum-waffle/chai";
-import { BigNumber, Signer } from "ethers";
-const logger = require("pino")();
+import { BigNumber, logger, Signer } from "ethers";
 use(waffleChai);
 
 describe("ETHPool", () => {
@@ -16,7 +15,6 @@ describe("ETHPool", () => {
   let teamAddress: string;
 
   let ethPool: ETHPool;
-  let exaToken: EXA;
   let daiToken: MockDAI;
   let mockV3Aggregator: MockV3Aggregator;
   let ethDaiPrice: BigNumber;
@@ -28,9 +26,6 @@ describe("ETHPool", () => {
     ownerAddress = await owner.getAddress();
     userAddress = await user.getAddress();
     teamAddress = await team.getAddress();
-
-    const exaFactory = await ethers.getContractFactory("EXA");
-    exaToken = (await exaFactory.deploy()) as EXA;
 
     // getethDaiPrice and set decimals, for MOCKVAgg contract, and for testing purpose
     ethDaiPrice = ethers.utils.parseEther("0.001");
@@ -50,15 +45,14 @@ describe("ETHPool", () => {
     const ethPoolFactory = await ethers.getContractFactory("ETHPool");
     ethPool = (await ethPoolFactory.deploy(
       teamAddress,
-      exaToken.address,
       daiToken.address,
-      mockV3Aggregator.address
+      mockV3Aggregator.address,
+      "Exactly LP Token",
+      "EXA"
     )) as ETHPool;
     await ethPool.deployed();
 
-    await exaToken.transferOwnership(ethPool.address, { from: ownerAddress });
-
-    initialSupply = await exaToken.totalSupply();
+    initialSupply = await ethPool.totalSupply();
 
     // mint DAI tokens
     await daiToken.transfer(userAddress, BigNumber.from("3000"));
@@ -66,16 +60,12 @@ describe("ETHPool", () => {
 
   describe("constructor", () => {
     it("should initialize the contract with the variables correctly", async () => {
-      const exaTokenContract = await ethPool.getExaToken();
-      const exaOwner = await exaToken.owner();
       const team = await ethPool.getTeam();
-      const ethDaiPriceContract = await ethPool.getEthDaiPrice();
+      const ethDaiPriceContract = await ethPool.getEthStablePrice();
       const stablecoin = await ethPool.stablecoin();
       const priceFeedAgg = await ethPool.priceFeedV3Aggregator();
 
-      expect(exaTokenContract).to.equal(exaToken.address);
       expect(team).to.equal(teamAddress);
-      expect(exaOwner).to.eq(ethPool.address);
       expect(ethDaiPriceContract.toString()).to.equal(ethDaiPrice.toString());
       expect(stablecoin).to.equal(daiToken.address);
       expect(priceFeedAgg).to.equal(mockV3Aggregator.address);
@@ -83,6 +73,15 @@ describe("ETHPool", () => {
   });
 
   describe("supply", () => {
+    it("should revert if amount supplied is zero", async () => {
+      const zero = BigNumber.from(0);
+      const ethAmount = zero;
+
+      await expect(
+        ethPool.supply({ from: ownerAddress, value: ethAmount })
+      ).to.be.revertedWith("Error__AmountIsZero()");
+    });
+
     it("should supply the ethPool with the correct amount of eth", async () => {
       const amount = ethers.utils.parseEther("0.5");
       const supply = await ethPool.connect(user).supply({
@@ -91,18 +90,6 @@ describe("ETHPool", () => {
       });
       expect(supply).to.changeEtherBalance(ethPool.address, amount);
       expect(supply).to.changeEtherBalance(userAddress, -amount);
-    });
-
-    it("should mint the EXA token to the sender", async () => {
-      const amount = ethers.utils.parseEther("0.5");
-      const senderBalanceBefore = await exaToken.balanceOf(userAddress);
-      await ethPool.connect(user).supply({
-        from: userAddress,
-        value: amount,
-      });
-
-      const senderBalanceAfter = await exaToken.balanceOf(userAddress);
-      expect(senderBalanceAfter).to.be.gt(senderBalanceBefore);
     });
 
     it("should update the total ETH amount deposited after supply", async () => {
@@ -194,21 +181,6 @@ describe("ETHPool", () => {
       expect(tx).to.changeTokenBalance(ethPool.address, userAddress, ethAmount);
     });
 
-    it("should mint correctly to the user that used DAI to supply", async () => {
-      const daiAmount = BigNumber.from("1000");
-      const userBalanceBefore = await exaToken.balanceOf(userAddress);
-
-      await daiToken
-        .connect(user)
-        .approve(ethPool.address, daiAmount, { from: userAddress });
-      await ethPool.connect(user).supplyWithStable(daiAmount, {
-        from: userAddress,
-      });
-
-      const userBalanceAfter = await exaToken.balanceOf(userAddress);
-      expect(userBalanceAfter).to.be.gt(userBalanceBefore);
-    });
-
     it("should emit the event correctly with other value for ethDaiPriceFeed", async () => {
       const daiAmount = BigNumber.from("2000");
       const newEthDaiPrice = BigNumber.from("2300");
@@ -236,7 +208,7 @@ describe("ETHPool", () => {
       const amount = ethers.utils.parseEther("0.5");
       await ethPool.connect(user).supply({ from: userAddress, value: amount });
 
-      const exaUserBalance = await exaToken.balanceOf(userAddress);
+      const exaUserBalance = await ethPool.balanceOf(userAddress);
       const amountToWithdraw = exaUserBalance.add(1);
       await expect(
         ethPool.connect(user).withdraw(amountToWithdraw, { from: userAddress })
@@ -247,7 +219,7 @@ describe("ETHPool", () => {
 
     it("should revert if the sender EXA amount is equal 0", async () => {
       const amount = ethers.utils.parseEther("0.5");
-      const exaUserBalance = await exaToken.balanceOf(userAddress);
+      const exaUserBalance = await ethPool.balanceOf(userAddress);
 
       expect(exaUserBalance).to.equal(BigNumber.from(0));
       await expect(
@@ -259,15 +231,11 @@ describe("ETHPool", () => {
       const amount = ethers.utils.parseEther("0.5");
       await ethPool.connect(user).supply({ from: userAddress, value: amount });
 
-      const amountToWithdraw = await exaToken.balanceOf(userAddress);
-
-      logger.info(`amountToWithdraw: ${amountToWithdraw}`);
+      const amountToWithdraw = await ethPool.balanceOf(userAddress);
 
       const withdraw = await ethPool.connect(user).withdraw(amountToWithdraw, {
         from: userAddress,
       });
-
-      logger.info("here");
 
       expect(withdraw).to.changeEtherBalance(userAddress, amountToWithdraw);
       expect(withdraw).to.changeEtherBalance(
@@ -277,64 +245,60 @@ describe("ETHPool", () => {
     });
 
     it("should withdraw the correct amount of EXA, from different supply with different senders and amounts", async () => {
-      const amountOne = ethers.utils.parseEther("0.5");
+      let amountUser = ethers.utils.parseEther("0.5");
       await ethPool
         .connect(user)
-        .supply({ from: userAddress, value: amountOne });
+        .supply({ from: userAddress, value: amountUser });
 
-      const amountTwo = ethers.utils.parseEther("0.6");
+      const amountOwner = ethers.utils.parseEther("0.6");
       await ethPool
         .connect(owner)
-        .supply({ from: ownerAddress, value: amountTwo });
+        .supply({ from: ownerAddress, value: amountOwner });
 
-      const amountThree = ethers.utils.parseEther("0.7");
+      amountUser = ethers.utils.parseEther("0.7");
       await ethPool
         .connect(user)
-        .supply({ from: userAddress, value: amountThree });
+        .supply({ from: userAddress, value: amountUser });
 
-      const amountToWithdrawOne = await exaToken.balanceOf(ownerAddress);
-      const withdrawOne = await ethPool
+      const amountToWithdrawOwner = await ethPool.balanceOf(ownerAddress);
+      const withdrawOwner = await ethPool
         .connect(owner)
-        .withdraw(amountToWithdrawOne, {
+        .withdraw(amountToWithdrawOwner, {
           from: ownerAddress,
         });
 
-      const amountToWithdrawTwo = await exaToken.balanceOf(userAddress);
-      const withdrawTwo = await ethPool
+      const amountToWithdrawUser = await ethPool.balanceOf(userAddress);
+      const exaSupply = await ethPool.totalSupply();
+      const withdrawUser = await ethPool
         .connect(user)
-        .withdraw(amountToWithdrawTwo, {
+        .withdraw(amountToWithdrawUser, {
           from: userAddress,
         });
 
-      expect(withdrawOne).to.changeEtherBalance(
-        userAddress,
-        amountToWithdrawOne
+      expect(withdrawOwner).to.changeEtherBalance(
+        ownerAddress,
+        amountToWithdrawOwner
       );
-      expect(withdrawOne).to.changeEtherBalance(
+      expect(withdrawOwner).to.changeEtherBalance(
         ethPool.address,
-        -amountToWithdrawOne
+        -amountToWithdrawOwner
       );
 
-      expect(withdrawTwo).to.changeEtherBalance(
+      expect(withdrawUser).to.changeEtherBalance(
         userAddress,
-        amountToWithdrawTwo
+        amountToWithdrawUser
       );
-      expect(withdrawTwo).to.changeEtherBalance(
+      expect(withdrawUser).to.changeEtherBalance(
         ethPool.address,
-        -amountToWithdrawTwo
+        -amountToWithdrawUser
       );
     });
 
     it("should update the total ETH balance after withdraw", async () => {
-      logger.info(
-        `First ETH balance: ${await ethers.provider.getBalance(
-          ethPool.address
-        )}`
-      );
       const amount = ethers.utils.parseEther("0.5");
       await ethPool.connect(user).supply({ from: userAddress, value: amount });
 
-      const amountToWithdraw = await exaToken.balanceOf(userAddress);
+      const amountToWithdraw = await ethPool.balanceOf(userAddress);
       await ethPool.connect(user).withdraw(amountToWithdraw, {
         from: userAddress,
       });
@@ -343,55 +307,11 @@ describe("ETHPool", () => {
       expect(totalBalance).to.eq(BigNumber.from(0));
     });
 
-    it("should burn correctly the EXA withdrawn amount", async () => {
-      const amount = ethers.utils.parseEther("0.5");
-      await ethPool.connect(user).supply({ from: userAddress, value: amount });
-
-      const exaSupplyBefore = await exaToken.totalSupply();
-      const amountToWithdraw = await exaToken.balanceOf(userAddress);
-
-      await ethPool.connect(user).withdraw(amountToWithdraw, {
-        from: userAddress,
-      });
-
-      const exaSupplyAfter = await exaToken.totalSupply();
-      expect(exaSupplyAfter).to.be.lt(exaSupplyBefore);
-      expect(exaSupplyAfter).to.be.eq(initialSupply);
-    });
-
-    it("should burn correctly the EXA withdrawn amount, after multiple withdrawns", async () => {
-      const amountOne = ethers.utils.parseEther("0.5");
-      await ethPool
-        .connect(user)
-        .supply({ from: userAddress, value: amountOne });
-
-      const amountTwo = ethers.utils.parseEther("0.6");
-      await ethPool
-        .connect(owner)
-        .supply({ from: ownerAddress, value: amountTwo });
-
-      const exaSupplyZero = await exaToken.totalSupply();
-
-      const amountToWithdrawOne = await exaToken.balanceOf(userAddress);
-      await ethPool.connect(user).withdraw(amountToWithdrawOne, {
-        from: userAddress,
-      });
-
-      const amountToWithdrawTwo = await exaToken.balanceOf(ownerAddress);
-      await ethPool.connect(owner).withdraw(amountToWithdrawTwo, {
-        from: ownerAddress,
-      });
-
-      const exaSupplyOne = await exaToken.totalSupply();
-      expect(exaSupplyOne).to.be.lt(exaSupplyZero);
-      expect(exaSupplyOne).to.be.eq(initialSupply);
-    });
-
     it("should emit Withdraw event correctly", async () => {
       const amount = ethers.utils.parseEther("0.5");
       await ethPool.connect(user).supply({ from: userAddress, value: amount });
 
-      const amountToWithdraw = await exaToken.balanceOf(userAddress);
+      const amountToWithdraw = await ethPool.balanceOf(userAddress);
       const tx = await ethPool.connect(user).withdraw(amountToWithdraw, {
         from: userAddress,
       });
@@ -422,11 +342,11 @@ describe("ETHPool", () => {
       const ethAmount = ethers.utils.parseEther("0.5");
       await team.sendTransaction({ to: ethPool.address, value: ethAmount });
 
-      const initialMintSupply = await exaToken.getInitialMintSupply();
+      const initialMintSupply = await ethPool.getInitialMintSupply();
       const ethPerUnit = initialMintSupply.div(ethAmount);
-      const exaEthPerUnit = await exaToken.getEthPerUnit();
+      const ethPerUnitContract = await ethPool.getEthPerUnit();
 
-      expect(exaEthPerUnit).to.eq(ethPerUnit);
+      expect(ethPerUnitContract).to.eq(ethPerUnit);
     });
 
     it("should receive the ETH and update the ETH balance in EXA token correctly after a supply from user and ETH sent from the team", async () => {
@@ -435,11 +355,9 @@ describe("ETHPool", () => {
 
       await team.sendTransaction({ to: ethPool.address, value: amount });
 
-      const exaSupply = await exaToken.totalSupply();
-      const exaEthPerUnit = await exaToken.getEthPerUnit();
+      const exaSupply = await ethPool.totalSupply();
+      const exaEthPerUnit = await ethPool.getEthPerUnit();
 
-      logger.info(exaSupply.toString());
-      logger.info(amount.toString());
       expect(exaEthPerUnit).to.eq(exaSupply.div(amount.mul(2)));
     });
 
@@ -453,11 +371,9 @@ describe("ETHPool", () => {
 
       await team.sendTransaction({ to: ethPool.address, value: amount });
 
-      const exaSupply = await exaToken.totalSupply();
-      const exaEthPerUnit = await exaToken.getEthPerUnit();
+      const exaSupply = await ethPool.totalSupply();
+      const exaEthPerUnit = await ethPool.getEthPerUnit();
 
-      logger.info(exaSupply.toString());
-      logger.info(amount.toString());
       expect(exaEthPerUnit).to.eq(exaSupply.div(amount.mul(3)));
     });
 
@@ -471,6 +387,161 @@ describe("ETHPool", () => {
       await expect(tx)
         .to.emit(ethPool, "TeamAddedETH")
         .withArgs(teamAddress, amount);
+    });
+  });
+
+  describe("_updateBalance", () => {
+    it("should update ethPerUnit correctly after a mint, an addEthBalance and a burn on every phase", async () => {
+      let ethAmount = ethers.utils.parseEther("0.3");
+      const initialMintSupply = await ethPool.getInitialMintSupply();
+
+      await ethPool
+        .connect(owner)
+        .supply({ from: ownerAddress, value: ethAmount });
+      let ethPerUnit = initialMintSupply.div(ethAmount);
+      let ethPerUnitContract = await ethPool.getEthPerUnit();
+      expect(ethPerUnitContract).to.be.equal(ethPerUnit);
+
+      await team.sendTransaction({
+        to: ethPool.address,
+        value: ethAmount,
+      });
+
+      ethAmount = ethAmount.add(ethAmount);
+      let totalSupply = await ethPool.totalSupply();
+      ethPerUnit = totalSupply.div(ethAmount);
+      ethPerUnitContract = await ethPool.getEthPerUnit();
+      expect(ethPerUnitContract).to.be.equal(ethPerUnit);
+
+      const ownerExaBalance = await ethPool.balanceOf(ownerAddress);
+      await ethPool
+        .connect(owner)
+        .withdraw(ownerExaBalance, { from: ownerAddress });
+
+      totalSupply = await ethPool.totalSupply();
+      ethPerUnit = totalSupply.div(ethAmount);
+      ethPerUnitContract = await ethPool.getEthPerUnit();
+
+      expect(ethPerUnitContract).to.be.equal(ethPerUnit);
+    });
+
+    it("should update ethPerunit after multiple mints, addEthBalance and burns of different addresses", async () => {
+      const ethAmountOne = ethers.utils.parseEther("0.1");
+      const ethAmountTwo = ethers.utils.parseEther("0.3");
+      const ethAmountThree = ethers.utils.parseEther("0.7");
+      const ethAmountFour = ethers.utils.parseEther("0.5");
+      const zero = BigNumber.from("0");
+      let totalEthAmount;
+      let totalSupply;
+      let ethPerUnit;
+      let userExaBalance;
+      let ethToWithdraw;
+
+      await ethPool
+        .connect(owner)
+        .supply({ from: ownerAddress, value: ethAmountOne });
+      await ethPool
+        .connect(user)
+        .supply({ from: userAddress, value: ethAmountTwo });
+
+      totalEthAmount = ethAmountOne.add(ethAmountTwo);
+      totalSupply = await ethPool.totalSupply();
+      ethPerUnit = totalSupply.div(totalEthAmount);
+
+      userExaBalance = await ethPool.balanceOf(userAddress);
+      ethToWithdraw = userExaBalance.div(ethPerUnit);
+      await ethPool.connect(user).withdraw(userExaBalance, {
+        from: userAddress,
+      });
+
+      totalEthAmount = totalEthAmount.sub(ethToWithdraw);
+      totalSupply = await ethPool.totalSupply();
+      ethPerUnit = totalSupply.div(totalEthAmount);
+
+      await team.sendTransaction({
+        to: ethPool.address,
+        value: ethAmountThree,
+      });
+
+      totalEthAmount = totalEthAmount.add(ethAmountThree);
+      ethPerUnit = totalSupply.div(totalEthAmount);
+
+      await ethPool
+        .connect(user)
+        .supply({ from: userAddress, value: ethAmountFour });
+
+      totalEthAmount = totalEthAmount.add(ethAmountFour);
+      totalSupply = await ethPool.totalSupply();
+      ethPerUnit = totalSupply.div(totalEthAmount);
+
+      const ownerExaBalance = await ethPool.balanceOf(ownerAddress);
+      ethToWithdraw = ownerExaBalance.div(ethPerUnit);
+      await ethPool
+        .connect(owner)
+        .withdraw(ownerExaBalance, { from: ownerAddress });
+
+      totalEthAmount = totalEthAmount.sub(ethToWithdraw);
+      totalSupply = await ethPool.totalSupply();
+      ethPerUnit = totalSupply.div(totalEthAmount);
+
+      userExaBalance = await ethPool.balanceOf(userAddress);
+      ethToWithdraw = userExaBalance.div(ethPerUnit);
+      await ethPool.connect(user).withdraw(userExaBalance, {
+        from: userAddress,
+      });
+
+      const ethPerUnitContract = await ethPool.getEthPerUnit();
+      const totalEthAmountContract = await ethPool.getTotalEthAmount();
+
+      expect(ethPerUnitContract).to.be.equal(zero);
+      expect(totalEthAmountContract).to.be.equal(zero);
+    });
+  });
+
+  describe("_mintEToken", () => {
+    it("should mint the eToken to the sender after a supply()", async () => {
+      const amount = ethers.utils.parseEther("0.5");
+      const senderBalanceBefore = await ethPool.balanceOf(userAddress);
+      await ethPool.connect(user).supply({
+        from: userAddress,
+        value: amount,
+      });
+
+      const senderBalanceAfter = await ethPool.balanceOf(userAddress);
+      expect(senderBalanceAfter).to.be.gt(senderBalanceBefore);
+    });
+
+    it("should mint correctly to the user that used and stablecoin in supplyWithStable for supplying liquidity", async () => {
+      const daiAmount = BigNumber.from("1000");
+      const userBalanceBefore = await ethPool.balanceOf(userAddress);
+
+      await daiToken
+        .connect(user)
+        .approve(ethPool.address, daiAmount, { from: userAddress });
+      await ethPool.connect(user).supplyWithStable(daiAmount, {
+        from: userAddress,
+      });
+
+      const userBalanceAfter = await ethPool.balanceOf(userAddress);
+      expect(userBalanceAfter).to.be.gt(userBalanceBefore);
+    });
+  });
+
+  describe("_burnEToken", () => {
+    it("should burn correctly the EXA withdrawn amount", async () => {
+      const amount = ethers.utils.parseEther("0.5");
+      await ethPool.connect(user).supply({ from: userAddress, value: amount });
+
+      const exaSupplyBefore = await ethPool.totalSupply();
+      const amountToWithdraw = await ethPool.balanceOf(userAddress);
+
+      await ethPool.connect(user).withdraw(amountToWithdraw, {
+        from: userAddress,
+      });
+
+      const exaSupplyAfter = await ethPool.totalSupply();
+      expect(exaSupplyAfter).to.be.lt(exaSupplyBefore);
+      expect(exaSupplyAfter).to.be.eq(initialSupply);
     });
   });
 
@@ -494,16 +565,47 @@ describe("ETHPool", () => {
     });
   });
 
-  describe("getEthDaiPrice", () => {
+  describe("getEthStablePrice", () => {
     it("should return the ETH/DAI price correctly", async () => {
-      const ethDaiPriceContract = await ethPool.getEthDaiPrice();
+      const ethDaiPriceContract = await ethPool.getEthStablePrice();
       expect(ethDaiPriceContract).to.eq(BigNumber.from(ethDaiPrice));
     });
   });
 
-  describe("getExaToken", () => {
-    it("should return the EXA token address correctly", async () => {
-      expect(await ethPool.getExaToken()).to.eq(exaToken.address);
+  describe("getEthPerUnit", () => {
+    it("should return the ethPerUnit correctly", async () => {
+      const zero = BigNumber.from("0");
+      const ethPerUnitContract = await ethPool.getEthPerUnit();
+
+      expect(ethPerUnitContract).to.be.equal(zero);
+    });
+  });
+
+  describe("getTotalEthAmount", () => {
+    it("should return the totalEthAmount correctly", async () => {
+      const zero = BigNumber.from("0");
+      const ethPerUnitContract = await ethPool.getTotalEthAmount();
+
+      expect(ethPerUnitContract).to.be.equal(zero);
+    });
+  });
+
+  describe("getInitialMintSupply", () => {
+    it("should return correctly the initialMintSupply", async () => {
+      const initialMintSupply = BigNumber.from(`${10 ** 18}`);
+      const initialMintSupplContract = await ethPool.getInitialMintSupply();
+
+      // if I write 10 ** 36 directly it overflows and fails
+      expect(initialMintSupplContract).to.be.equal(initialMintSupply.pow(2));
+    });
+  });
+
+  describe("getTotalExaAmount", () => {
+    it("should return the totalExaAmount correctly", async () => {
+      const zero = BigNumber.from(0);
+      const totalExaAmountContract = await ethPool.getTotalExaAmount();
+
+      expect(totalExaAmountContract).to.be.equal(zero);
     });
   });
 });
