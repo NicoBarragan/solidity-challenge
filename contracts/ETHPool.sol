@@ -4,11 +4,9 @@ pragma solidity ^0.8.9;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
-import "hardhat/console.sol";
 
 // errors
 error Error__NotEnoughAmount(uint256 amountRequested, uint256 balance);
@@ -16,7 +14,7 @@ error Error__SenderIsNotTeam();
 error Error__AmountIsZero();
 error Error__DivFailed(uint256 dividend, uint256 divisor);
 
-contract ETHPool is ERC20, Ownable, ReentrancyGuard {
+contract ETHPool is ERC20, ReentrancyGuard {
     using SafeMath for uint256;
 
     // events to emit
@@ -141,16 +139,11 @@ contract ETHPool is ERC20, Ownable, ReentrancyGuard {
             );
         }
 
-        console.log("lpAmount", lpAmount);
         (bool success, uint256 ethAmount) = lpAmount.tryDiv(_ethPerUnit);
         if (!success || ethAmount == 0) {
             revert Error__DivFailed(lpAmount, _ethPerUnit);
         }
-        console.log("ethAmount: ", ethAmount);
-        console.log("_ethPerUnit: ", _ethPerUnit);
-        console.log("_totalEthAmount: ", _totalEthAmount);
         (, _totalEthAmount) = _totalEthAmount.trySub(ethAmount);
-        console.log("_totalEthAmount: ", _totalEthAmount);
         (, _totalExaAmount) = _totalExaAmount.trySub(lpAmount);
         payable(msg.sender).transfer(ethAmount);
 
@@ -198,18 +191,12 @@ contract ETHPool is ERC20, Ownable, ReentrancyGuard {
             _ethPerUnit = 0;
             return;
         }
-        console.log("------------");
-        console.log("_updateBalance");
-        console.log("_totalEthAmount: ", _totalEthAmount);
-        console.log("_totalExaAmount: ", _totalExaAmount);
 
         bool success;
         (success, _ethPerUnit) = _totalExaAmount.tryDiv(_totalEthAmount);
         if (!success) {
             revert Error__DivFailed(_totalExaAmount, _totalEthAmount);
         }
-        console.log("_ethPerUnit: ", _ethPerUnit);
-        console.log("------------");
     }
 
     // function for updating the _team if necessary
