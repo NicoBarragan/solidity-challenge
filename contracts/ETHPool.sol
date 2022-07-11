@@ -24,8 +24,6 @@ contract ETHPool is ERC20, ReentrancyGuard {
 
     // variables and constants
     address private _team;
-    IERC20 public immutable stablecoin;
-    AggregatorV3Interface public immutable priceFeedV3Aggregator;
 
     // eToken variables and constants
     uint256 private constant _initialMintSupply = 1 * 10**36; // big enough in order to make divisible
@@ -35,14 +33,10 @@ contract ETHPool is ERC20, ReentrancyGuard {
 
     constructor(
         address team,
-        address stablecoinAddress,
-        address ethStablePriceFeed,
         string memory name,
         string memory symbol
     ) ERC20(name, symbol) {
         _team = team;
-        priceFeedV3Aggregator = AggregatorV3Interface(ethStablePriceFeed);
-        stablecoin = IERC20(stablecoinAddress);
     }
 
     // modifier for avoid amount in param to be zero
@@ -63,53 +57,9 @@ contract ETHPool is ERC20, ReentrancyGuard {
 
     // method for supply ETH to the pool and mint EXA tokens to the sender
     function supply() external payable checkAmount(msg.value) nonReentrant {
-        if (msg.value == 0) {
-            revert Error__AmountIsZero();
-        }
-
         uint256 ethAmount = msg.value;
         _totalEthAmount += ethAmount;
 
-        if (_ethPerUnit == 0) {
-            _ethPerUnit = (_initialMintSupply / ethAmount);
-        }
-
-        uint256 _exaAmount;
-        _exaAmount = ethAmount * _ethPerUnit;
-        _totalExaAmount += _exaAmount;
-        _mintEToken(msg.sender, _exaAmount);
-
-        emit Supply(msg.sender, ethAmount);
-    }
-
-    // method for supply DAI to the pool, convert to ETH amount and mint EXA tokens to the sender
-    function supplyWithStable(uint256 stableAmount)
-        external
-        checkAmount(stableAmount)
-        nonReentrant
-    {
-        if (
-            stablecoin.balanceOf(msg.sender) == 0 ||
-            stableAmount > stablecoin.balanceOf(msg.sender)
-        ) {
-            revert Error__NotEnoughAmount(
-                stableAmount,
-                stablecoin.balanceOf(msg.sender)
-            );
-        }
-
-        uint256 ethStablePrice = getEthStablePrice();
-        (bool success, uint256 ethAmount) = (stableAmount * 10**18).tryDiv(
-            uint256(ethStablePrice) // for keeping with 18 decimals
-        );
-        if (!success || ethAmount == 0) {
-            revert Error__DivFailed(stableAmount, uint256(ethStablePrice));
-        }
-
-        _totalEthAmount += ethAmount;
-        stablecoin.transferFrom(msg.sender, address(this), stableAmount);
-        /* This is for avoid a division error when mint() is the
-         * first interaction with the contract and _ethPerUnit is equal zero */
         if (_ethPerUnit == 0) {
             _ethPerUnit = (_initialMintSupply / ethAmount);
         }
@@ -172,16 +122,14 @@ contract ETHPool is ERC20, ReentrancyGuard {
 
     // method for mint EXA tokens and execute update ethPerUnit and totalEthAmount
     function _mintEToken(address _to, uint256 _exaAmount) internal {
-        _mint(_to, _exaAmount);
-
         _updateBalance();
+        _mint(_to, _exaAmount);
     }
 
     // method for burn EXA tokens and update ethPerUnit and totalEthAmount
     function _burnEtoken(address _from, uint256 exaAmount) internal {
-        _burn(_from, exaAmount);
-
         _updateBalance();
+        _burn(_from, exaAmount);
     }
 
     // method for update ethPerUnit
@@ -208,12 +156,6 @@ contract ETHPool is ERC20, ReentrancyGuard {
 
     function getEthPerUnit() external view returns (uint256) {
         return _ethPerUnit;
-    }
-
-    function getEthStablePrice() public view returns (uint256) {
-        (, int256 ethStablePrice, , , ) = priceFeedV3Aggregator
-            .latestRoundData();
-        return uint256(ethStablePrice);
     }
 
     function getTotalEthAmount() external view returns (uint256) {
