@@ -4,7 +4,7 @@
 
 I came up with the solution via `ETHPool`: a pool contract that inherits from `ERC20` standard that calculates balances, and mints and burns lp tokens based on the ETH amount received. Also it calculates balance when the team sends ETH to the pool (only the team can).
 
-You can find an exported function for getting the contract balance in `get-balance.ts`, and you can run the script `get-eth-pool-balance` for getting the ETH balance of the pool from the console.
+You can find an exported function for getting the contract balance in `get-balance.ts`.
 
 The contract is successfully tested with 35 unit tests, and an integration test.
 
