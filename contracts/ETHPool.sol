@@ -27,9 +27,9 @@ contract ETHPool is ERC20, ReentrancyGuard {
 
     // eToken variables and constants
     uint256 private constant _initialMintSupply = 1 * 10**36; // big enough in order to make divisible
-    uint256 private _totalEthAmount = 0; // is necessary because balance doesn't update immediately
-    uint256 private _totalExaAmount = 0; // is necessary because balance doesn't update immediately
-    uint256 private _ethPerUnit = 0;
+    uint256 private _totalEthAmount; // is necessary because balance doesn't update immediately
+    uint256 private _totalExaAmount; // is necessary because balance doesn't update immediately
+    uint256 private _ethPerUnit;
 
     constructor(
         address team,
@@ -93,8 +93,15 @@ contract ETHPool is ERC20, ReentrancyGuard {
         if (!success || ethAmount == 0) {
             revert Error__DivFailed(lpAmount, _ethPerUnit);
         }
+
+        uint256 maxTotalEthAmount = _totalEthAmount;
         (, _totalEthAmount) = _totalEthAmount.trySub(ethAmount);
         (, _totalExaAmount) = _totalExaAmount.trySub(lpAmount);
+
+        if (_totalEthAmount == 0) {
+            ethAmount = maxTotalEthAmount;
+        }
+
         payable(msg.sender).transfer(ethAmount);
 
         _burnEtoken(msg.sender, lpAmount);
@@ -104,7 +111,7 @@ contract ETHPool is ERC20, ReentrancyGuard {
 
     // method for the team to send ETH to the pool, and the pool to update ETH balance in EXA token
     receive() external payable onlyTeam nonReentrant {
-        _totalEthAmount += msg.value;
+        _totalEthAmount += (msg.value);
 
         /* This is for avoid a division error when addEthBalance() is the
          * first interaction with the contract and _ethPerUnit is equal zero */
