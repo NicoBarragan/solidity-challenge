@@ -27,6 +27,18 @@ task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
   }
 });
 
+task("balance", "Prints an account's balance")
+  .addParam("account", "The account's address")
+  .setAction(async (taskArgs, hre) => {
+    const balance = await hre.ethers.provider.getBalance(taskArgs.account);
+
+    console.log(
+      `The ETH balance of ${
+        taskArgs.account
+      } address is: ${hre.ethers.utils.formatEther(balance)}`
+    );
+  });
+
 // You need to export an object to set up your config
 // Go to https://hardhat.org/config/ to learn more
 
