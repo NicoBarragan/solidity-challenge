@@ -12,7 +12,7 @@ use(waffleChai);
 
 const found = process.argv.indexOf("--network");
 const networkName = process.argv[found + 1]; // this for check after in etherscscan
-const TIMEOUT = 1000 * 60 * 2; // 2 minutes
+const TIMEOUT = 1000 * 60 * 3; // 3 minutes
 const GAS_LIMIT = 2074040;
 
 describe("integration-ETHPool", () => {
@@ -47,7 +47,7 @@ describe("integration-ETHPool", () => {
   it("should complete the challenge proposed correctly", function (done) {
     this.timeout(TIMEOUT);
 
-    const test = async () => {
+    (async () => {
       try {
         const userAEthAmount = userAInitialBalance.div(10);
         logger.info(`userAInitialBalance:   ${userAInitialBalance}`);
@@ -120,10 +120,10 @@ describe("integration-ETHPool", () => {
           userB.address,
           userBEthAmount
         );
+        done();
       } catch (err) {
         logger.error(err);
       }
-    };
-    done();
+    })();
   });
 });
