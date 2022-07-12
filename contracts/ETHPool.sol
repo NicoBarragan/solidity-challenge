@@ -22,19 +22,29 @@ contract ETHPool is ReentrancyGuard {
     event TeamAddedETH(address indexed team, uint256 amount);
 
     // variables and constants
-    IEXA private _exaToken;
     address private _team;
     IERC20 public immutable stablecoin;
     AggregatorV3Interface public immutable priceFeedV3Aggregator;
 
+    uint256 private constant _initialMintSupply = 1 * 10**18;
+    uint256 private _totalEthAmount;
+    uint256 private _totalShares;
+    uint256 private _ethPerUnit;
+
+    struct Shares {
+        uint256 shares;
+        uint256 ethDeposited;
+        uint256 stableDeposited;
+    }
+
+    mapping(address => Shares) private _shares;
+
     constructor(
         address team,
-        address exaAddress,
         address stablecoinAddress,
         address ethStablePriceFeed
     ) {
         _team = team;
-        _exaToken = IEXA(exaAddress);
         priceFeedV3Aggregator = AggregatorV3Interface(ethStablePriceFeed);
         stablecoin = IERC20(stablecoinAddress);
     }
@@ -57,8 +67,10 @@ contract ETHPool is ReentrancyGuard {
 
     // method for supply ETH to the pool and mint EXA tokens to the sender
     function supply() external payable nonReentrant {
-        _exaToken.mint(msg.sender, msg.value);
+        _totalEthAmount += msg.value;
+        _shares[msg.sender].ethDeposited += msg.value;
 
+        _updateShares(msg.sender, msg.value);
         emit Supply(msg.sender, msg.value);
     }
 
@@ -86,47 +98,109 @@ contract ETHPool is ReentrancyGuard {
             revert Error__DivFailed(stableAmount, uint256(ethDaiPrice));
         }
 
-        stablecoin.transferFrom(msg.sender, address(this), stableAmount);
-        _exaToken.mint(msg.sender, ethAmount);
+        _shares[msg.sender].stableDeposited += stableAmount;
+        _updateShares(msg.sender, ethAmount);
 
+        stablecoin.transferFrom(msg.sender, address(this), stableAmount);
         emit Supply(msg.sender, ethAmount);
     }
 
     // method for withdraw ETH from the pool and burn EXA tokens from the sender
-    function withdraw(uint256 lpAmount)
+    function withdraw(uint256 sharesAmm)
         external
         payable
-        checkAmount(lpAmount)
+        checkAmount(sharesAmm)
         nonReentrant
     {
         if (
-            0 > _exaToken.balanceOf(msg.sender) ||
-            lpAmount > _exaToken.balanceOf(msg.sender)
+            0 > _shares[msg.sender].ethDeposited ||
+            _shares[msg.sender].ethDeposited < sharesAmm
         ) {
             revert Error__NotEnoughAmount(
-                lpAmount,
-                _exaToken.balanceOf(msg.sender)
+                sharesAmm,
+                _shares[msg.sender].ethDeposited
             );
         }
 
-        uint256 ethPerUnit = _exaToken.getEthPerUnit();
+        uint256 ethPerUnit = getEthPerUnit();
 
-        (bool success, uint256 ethAmount) = lpAmount.tryDiv(ethPerUnit);
+        (bool success, uint256 ethAmount) = sharesAmm.tryDiv(ethPerUnit);
         if (!success || ethAmount == 0) {
-            revert Error__DivFailed(lpAmount, ethPerUnit);
+            revert Error__DivFailed(sharesAmm, ethPerUnit);
         }
 
+        _shares[msg.sender].ethDeposited -= sharesAmm;
         payable(msg.sender).transfer(ethAmount);
-        _exaToken.burn(msg.sender, lpAmount, ethAmount);
 
         emit Withdraw(msg.sender, ethAmount);
     }
 
+    // function withdrawStable(uint256 sharesAmm)
+    //     external
+    //     payable
+    //     checkAmount(sharesAmm)
+    //     nonReentrant
+    // {
+    //     if (
+    //         0 > _shares[msg.sender].shares ||
+    //         _shares[msg.sender].shares < sharesAmm
+    //     ) {
+    //         revert Error__NotEnoughAmount(
+    //             sharesAmm,
+    //             _shares[msg.sender].stableDeposited
+    //         );
+    //     }
+
+    //     // uint256 stablePerUnit = getStablePerEth();
+
+    //     (bool success, uint256 stableAmount) = sharesAmm.tryDiv(stablePerUnit);
+    //     if (!success || stableAmount == 0) {
+    //         revert Error__DivFailed(sharesAmm, stablePerUnit);
+    //     }
+
+    //     _shares[msg.sender].stableDeposited -= sharesAmm;
+    //     payable(msg.sender).transfer(stableAmount);
+
+    //     emit Withdraw(msg.sender, stableAmount);
+    // }
+
     // method for the team to send ETH to the pool, and the pool to update ETH balance in EXA token
     receive() external payable onlyTeam nonReentrant {
-        _exaToken.addEthBalance(msg.value);
+        _totalEthAmount += msg.value;
+        _updateEthPerUnit();
 
         emit TeamAddedETH(msg.sender, msg.value);
+    }
+
+    // method for update ethPerUnit
+    function _updateShares(address sender, uint256 ethAmount) internal {}
+
+    function _updateEthPerUnit() internal {
+        // this is for avoid a division error
+        if (_totalEthAmount == 0 && _totalEthAmount == 0) {
+            _ethPerUnit = 0;
+            return;
+        }
+
+        bool success;
+        (success, _ethPerUnit) = _totalEthAmount.tryDiv(_totalEthAmount);
+        if (!success) {
+            revert Error__DivFailed(_totalEthAmount, _totalEthAmount);
+        }
+    }
+
+    /* View functions */
+
+    function getEthPerUnit() public view returns (uint256) {
+        return _ethPerUnit;
+    }
+
+    function getTotalEthAmount() external view returns (uint256) {
+        return _totalEthAmount;
+    }
+
+    function getInitialMintSupply() external pure returns (uint256) {
+        return _initialMintSupply;
     }
 
     // function for updating the _team if is necessary
@@ -143,9 +217,5 @@ contract ETHPool is ReentrancyGuard {
     function getEthDaiPrice() external view returns (uint256) {
         (, int256 ethDaiPrice, , , ) = priceFeedV3Aggregator.latestRoundData();
         return uint256(ethDaiPrice);
-    }
-
-    function getExaToken() external view returns (address) {
-        return address(_exaToken);
     }
 }
