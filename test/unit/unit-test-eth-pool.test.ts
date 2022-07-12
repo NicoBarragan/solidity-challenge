@@ -2,8 +2,8 @@ import { ETHPool } from "../../typechain";
 import { expect, use } from "chai";
 import "@nomiclabs/hardhat-ethers";
 import { ethers } from "hardhat";
-import { waffleChai } from "@ethereum-waffle/chai";
 import { BigNumber, Signer } from "ethers";
+import { waffleChai } from "@ethereum-waffle/chai";
 const logger = require("pino")();
 use(waffleChai);
 
@@ -34,6 +34,111 @@ describe("unit-ETHPool", () => {
     await ethPool.deployed();
 
     initialSupply = await ethPool.totalSupply();
+  });
+
+  describe("should complete the Exactly Solidity Challenge successfully", () => {
+    it("should update ethPerUnit correctly after multiple mints, addEthBalance and burns of different addresses", async () => {
+      const zero = BigNumber.from("0");
+
+      const userEthAmount = ethers.utils.parseEther("1");
+      await ethPool.connect(user).supply({
+        from: userAddress,
+        value: userEthAmount,
+      });
+
+      const ethAmountTeam = ethers.utils.parseEther("12");
+      await team.sendTransaction({
+        to: ethPool.address,
+        value: ethAmountTeam,
+      });
+
+      const ownerEthAmount = ethers.utils.parseEther("0.4");
+      await ethPool.connect(owner).supply({
+        from: ownerAddress,
+        value: ownerEthAmount,
+      });
+
+      const userExaBalance = await ethPool.balanceOf(userAddress);
+
+      const userAWithdrawTx = await ethPool
+        .connect(user)
+        .withdraw(userExaBalance, {
+          from: userAddress,
+        });
+
+      const ownerExaBalance = await ethPool.balanceOf(ownerAddress);
+      const ownerWithdrawTx = await ethPool
+        .connect(owner)
+        .withdraw(ownerExaBalance, {
+          from: ownerAddress,
+        });
+
+      const ethPoolFinalBalance = await ethers.provider.getBalance(
+        ethPool.address
+      );
+
+      expect(ethPoolFinalBalance).to.be.equal(zero);
+      expect(userAWithdrawTx).to.changeEtherBalance(
+        userAddress,
+        userEthAmount.add(ethAmountTeam)
+      );
+      expect(ownerWithdrawTx).to.changeEtherBalance(
+        ownerAddress,
+        ownerEthAmount
+      );
+    });
+
+    it("should update ethPerUnit correctly after multiple mints, addEthBalance and burns of different addresses", async () => {
+      const zero = BigNumber.from("0");
+
+      const userEthAmount = BigNumber.from("2190793678735048");
+      await ethPool.connect(user).supply({
+        from: userAddress,
+        value: userEthAmount,
+      });
+
+      const ethAmountTeam = BigNumber.from("896419852491072");
+      await team.sendTransaction({
+        to: ethPool.address,
+        value: ethAmountTeam,
+      });
+
+      const ownerEthAmount = BigNumber.from("14996849999981100");
+      await ethPool.connect(owner).supply({
+        from: ownerAddress,
+        value: ownerEthAmount,
+      });
+
+      const userExaBalance = await ethPool.balanceOf(userAddress);
+
+      const userAWithdrawTx = await ethPool
+        .connect(user)
+        .withdraw(userExaBalance, {
+          from: userAddress,
+        });
+
+      const ownerExaBalance = await ethPool.balanceOf(ownerAddress);
+      const ownerWithdrawTx = await ethPool
+        .connect(owner)
+        .withdraw(ownerExaBalance, {
+          from: ownerAddress,
+        });
+
+      const ethPoolFinalBalance = await ethers.provider.getBalance(
+        ethPool.address
+      );
+
+      expect(ethPoolFinalBalance).to.be.equal(zero);
+      expect(userAWithdrawTx).to.changeEtherBalance(
+        userAddress,
+        userEthAmount.add(ethAmountTeam)
+      );
+      expect(ownerWithdrawTx).to.changeEtherBalance(
+        ownerAddress,
+        ownerEthAmount
+      );
+      logger.info(1);
+    });
   });
 
   describe("constructor", () => {
@@ -152,7 +257,6 @@ describe("unit-ETHPool", () => {
         });
 
       const amountToWithdrawUser = await ethPool.balanceOf(userAddress);
-      const exaSupply = await ethPool.totalSupply();
       const withdrawUser = await ethPool
         .connect(user)
         .withdraw(amountToWithdrawUser, {
@@ -379,58 +483,6 @@ describe("unit-ETHPool", () => {
 
       expect(ethPerUnitContract).to.be.equal(zero);
       expect(totalEthAmountContract).to.be.equal(zero);
-    });
-
-    it("should update ethPerUnit correctly after multiple mints, addEthBalance and burns of different addresses", async () => {
-      const zero = BigNumber.from("0");
-
-      const userEthAmount = ethers.utils.parseEther("0.1");
-      await ethPool.connect(user).supply({
-        from: userAddress,
-        value: userEthAmount,
-      });
-
-      const teamBalance = await ethers.provider.getBalance(teamAddress);
-      const ethAmountTeam = teamBalance.div(10);
-      await team.sendTransaction({
-        to: ethPool.address,
-        value: ethAmountTeam,
-      });
-
-      const ownerEthAmount = ethers.utils.parseEther("0.4");
-      await ethPool.connect(owner).supply({
-        from: ownerAddress,
-        value: ownerEthAmount,
-      });
-
-      const userExaBalance = await ethPool.balanceOf(userAddress);
-      const userAWithdrawTx = await ethPool
-        .connect(user)
-        .withdraw(userExaBalance, {
-          from: userAddress,
-        });
-
-      const ownerExaBalance = await ethPool.balanceOf(ownerAddress);
-      const ownerWithdrawTx = await ethPool
-        .connect(owner)
-        .withdraw(ownerExaBalance, {
-          from: ownerAddress,
-        });
-
-      const ethPoolFinalBalance = await ethers.provider.getBalance(
-        ethPool.address
-      );
-
-      expect(ethPoolFinalBalance).to.be.equal(zero);
-      expect(userAWithdrawTx).to.changeEtherBalance(
-        userAddress,
-        userEthAmount.add(ethAmountTeam)
-      );
-      expect(ownerWithdrawTx).to.changeEtherBalance(
-        ownerAddress,
-        ownerEthAmount
-      );
-      logger.info(`ethPoolFinalBalance, ${ethPoolFinalBalance}`);
     });
   });
 
